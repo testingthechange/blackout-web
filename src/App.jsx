@@ -61,7 +61,8 @@ export default function App() {
       setBackendStatus("missing");
       return;
     }
-    fetch(base)
+    fetch(`${base}/`)
+
       .then((res) => setBackendStatus(res.ok ? "ok" : "fail"))
       .catch(() => setBackendStatus("fail"));
   }, []);
