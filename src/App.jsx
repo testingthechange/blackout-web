@@ -52,12 +52,50 @@ export default function App() {
   const nav = useNavigate();
   const { isAuthed, setIsAuthed } = useAuth();
 
+  // Backend ping (Phase 0)
+  const [backendStatus, setBackendStatus] = useState("checking");
+
+  useEffect(() => {
+    const base = import.meta.env.VITE_ALBUM_BACKEND_URL;
+    if (!base) {
+      setBackendStatus("missing");
+      return;
+    }
+    fetch(base)
+      .then((res) => setBackendStatus(res.ok ? "ok" : "fail"))
+      .catch(() => setBackendStatus("fail"));
+  }, []);
+
   return (
     <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 30% 20%, #0b1633 0%, #060a16 55%, #04060c 100%)" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 60px" }}>
+        
+        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-          <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 900, letterSpacing: 0.3 }}>
-            block radius
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 900, letterSpacing: 0.3 }}>
+              blackout
+            </div>
+
+            <div
+              style={{
+                fontFamily: "system-ui",
+                fontSize: 12,
+                fontWeight: 800,
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(255,255,255,0.06)",
+                color: "white",
+                opacity: 0.9,
+              }}
+            >
+              Backend:{" "}
+              {backendStatus === "checking" && "…"}
+              {backendStatus === "ok" && "OK"}
+              {backendStatus === "fail" && "FAIL"}
+              {backendStatus === "missing" && "MISSING ENV"}
+            </div>
           </div>
 
           {!isAuthed ? (
@@ -97,7 +135,9 @@ export default function App() {
           )}
         </div>
 
+        {/* Body */}
         <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
+          {/* Side Nav */}
           <div
             style={{
               width: 220,
@@ -135,6 +175,7 @@ export default function App() {
             )}
           </div>
 
+          {/* Main */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <Routes>
               <Route path="/" element={<Navigate to="/shop" replace />} />
@@ -159,7 +200,7 @@ export default function App() {
                 element={
                   <RequireAuth>
                     <div style={{ color: "white", fontFamily: "system-ui" }}>
-                      <h1 style={{ marginTop: 0 }}>Export/Tools</h1>
+                      <h1 style={{ marginTop: 0 }}>Export / Tools</h1>
                       <p style={{ opacity: 0.85 }}>Placeholder.</p>
                     </div>
                   </RequireAuth>
