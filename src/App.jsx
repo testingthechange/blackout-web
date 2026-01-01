@@ -26,23 +26,22 @@ function RequireAuth({ children }) {
   return children;
 }
 
-function NavLink({ to, children }) {
+function TopNavLink({ to, children }) {
   const loc = useLocation();
-  const active = loc.pathname === to;
+  const active = loc.pathname === to || (to !== "/" && loc.pathname.startsWith(to));
   return (
     <Link
       to={to}
       style={{
-        display: "block",
         textDecoration: "none",
         color: "white",
         fontFamily: "system-ui",
         fontWeight: 900,
         padding: "10px 12px",
-        borderRadius: 10,
+        borderRadius: 12,
         border: "1px solid rgba(255,255,255,0.10)",
-        background: active ? "rgba(255,255,255,0.12)" : "transparent",
-        opacity: active ? 1 : 0.82,
+        background: active ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
+        opacity: active ? 1 : 0.86,
       }}
     >
       {children}
@@ -114,81 +113,79 @@ export default function App() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background:
-          "radial-gradient(circle at 30% 20%, #0b1633 0%, #060a16 55%, #04060c 100%)",
-      }}
-    >
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 110px" }}>
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 900 }}>
-              Block Radius
+    <div style={page}>
+      {/* subtle gradient filter overlay */}
+      <div style={bgOverlay} />
+
+      <div style={{ position: "relative" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 110px" }}>
+          {/* Top bar */}
+          <div style={topBar}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+              <div style={brand}>Block Radius</div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <TopNavLink to="/">Home</TopNavLink>
+                <TopNavLink to="/shop">Shop</TopNavLink>
+                <TopNavLink to="/account">Account</TopNavLink>
+              </div>
+
+              <div style={backendPill}>
+                Backend:{" "}
+                {backendStatus === "checking" && "…"}
+                {backendStatus === "ok" && "OK"}
+                {backendStatus === "fail" && "FAIL"}
+                {backendStatus === "missing" && "MISSING ENV"}
+              </div>
             </div>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 900,
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(255,255,255,0.06)",
-                color: "white",
-              }}
-            >
-              Backend:{" "}
-              {backendStatus === "checking" && "…"}
-              {backendStatus === "ok" && "OK"}
-              {backendStatus === "fail" && "FAIL"}
-              {backendStatus === "missing" && "MISSING ENV"}
+
+            <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
+              {!isAuthed ? (
+                <button
+                  onClick={() => nav(`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`)}
+                  style={topBtn}
+                >
+                  Login
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("authToken");
+                    setIsAuthed(false);
+                    nav("/shop");
+                  }}
+                  style={topBtn}
+                >
+                  Logout
+                </button>
+              )}
+
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search"
+                style={searchInput}
+              />
             </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
-            {!isAuthed ? (
-              <button
-                onClick={() => nav(`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`)}
-                style={topBtn}
-              >
-                Login
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  localStorage.removeItem("authToken");
-                  setIsAuthed(false);
-                  nav("/shop");
-                }}
-                style={topBtn}
-              >
-                Logout
-              </button>
-            )}
-
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search"
-              style={searchInput}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
-          {/* Side nav */}
-          <div style={sideNav}>
-            <div style={navHeader}>Public</div>
-            <NavLink to="/shop">Shop</NavLink>
           </div>
 
           {/* Main */}
-          <div style={{ flex: 1 }}>
+          <div style={{ marginTop: 16 }}>
             <Routes>
-              <Route path="/" element={<Navigate to="/shop" replace />} />
+              <Route
+                path="/"
+                element={
+                  <div style={pageCard}>
+                    <h1 style={{ marginTop: 0, marginBottom: 8, fontFamily: "system-ui", color: "white" }}>Home</h1>
+                    <div style={{ color: "white", opacity: 0.78, fontFamily: "system-ui" }}>
+                      Phase 1 placeholder.
+                    </div>
+                  </div>
+                }
+              />
+
               <Route path="/shop" element={<Shop />} />
+
               <Route
                 path="/shop/:productId"
                 element={
@@ -202,59 +199,122 @@ export default function App() {
                   />
                 }
               />
+
               <Route path="/sold" element={<Sold />} />
               <Route path="/login" element={<Login />} />
+
+              <Route
+                path="/account"
+                element={
+                  <RequireAuth>
+                    <div style={pageCard}>
+                      <h1 style={{ marginTop: 0, marginBottom: 8, fontFamily: "system-ui", color: "white" }}>
+                        Account
+                      </h1>
+                      <div style={{ color: "white", opacity: 0.78, fontFamily: "system-ui" }}>
+                        Phase 1 placeholder.
+                      </div>
+                    </div>
+                  </RequireAuth>
+                }
+              />
+
               <Route path="*" element={<Navigate to="/shop" replace />} />
             </Routes>
           </div>
         </div>
-      </div>
 
-      <BottomPlayer
-        track={activeTrack}
-        isPlaying={isPlaying}
-        onPlayPause={(next) => setIsPlaying(Boolean(next))}
-        onPrev={onPrev}
-        onNext={onNext}
-        previewSeconds={30}
-      />
+        <BottomPlayer
+          track={activeTrack}
+          isPlaying={isPlaying}
+          onPlayPause={(next) => setIsPlaying(Boolean(next))}
+          onPrev={onPrev}
+          onNext={onNext}
+          previewSeconds={30}
+        />
+      </div>
     </div>
   );
 }
 
+const page = {
+  minHeight: "100vh",
+  background: "#0b0d10", // darker grey base
+  position: "relative",
+};
+
+const bgOverlay = {
+  position: "absolute",
+  inset: 0,
+  pointerEvents: "none",
+  background:
+    "radial-gradient(1200px 700px at 18% 10%, rgba(90,120,255,0.12), transparent 60%), radial-gradient(900px 600px at 85% 35%, rgba(40,220,150,0.08), transparent 55%), radial-gradient(900px 700px at 45% 95%, rgba(210,80,255,0.07), transparent 60%)",
+  filter: "blur(0px)",
+  opacity: 1,
+};
+
+const topBar = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 16,
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 16,
+  padding: 14,
+  background: "rgba(255,255,255,0.04)",
+};
+
+const brand = {
+  color: "white",
+  fontFamily: "system-ui",
+  fontWeight: 950,
+  letterSpacing: 0.2,
+  marginRight: 8,
+  whiteSpace: "nowrap",
+};
+
+const backendPill = {
+  fontFamily: "system-ui",
+  fontSize: 12,
+  fontWeight: 900,
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  opacity: 0.95,
+  whiteSpace: "nowrap",
+  alignSelf: "center",
+};
+
 const topBtn = {
   width: 140,
   padding: "10px 14px",
-  borderRadius: 10,
+  borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
   color: "white",
   fontWeight: 900,
   cursor: "pointer",
+  fontFamily: "system-ui",
 };
 
 const searchInput = {
   width: 420,
   height: 44,
   padding: "0 14px",
-  borderRadius: 10,
+  borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
   color: "white",
   fontWeight: 800,
   outline: "none",
+  fontFamily: "system-ui",
 };
 
-const sideNav = {
-  width: 220,
+const pageCard = {
   border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 14,
-  padding: 12,
+  borderRadius: 16,
+  padding: 16,
   background: "rgba(255,255,255,0.04)",
-};
-
-const navHeader = {
-  fontWeight: 900,
-  opacity: 0.85,
-  marginBottom: 10,
 };
