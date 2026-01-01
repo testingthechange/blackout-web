@@ -20,12 +20,11 @@ function loadPurchases() {
 }
 
 export default function MyAccount() {
-  const [q, setQ] = useState("");
   const [mode, setMode] = useState(() => localStorage.getItem(MODE_KEY) || "album");
 
   const purchases = useMemo(() => loadPurchases(), []);
   const albums = useMemo(() => {
-    const rows = purchases
+    return purchases
       .map((p) => {
         const productId = String(p?.productId || "").trim();
         if (!productId) return null;
@@ -34,17 +33,7 @@ export default function MyAccount() {
         return { ...prod, purchasedAt: p?.purchasedAt || "" };
       })
       .filter(Boolean);
-
-    const needle = q.trim().toLowerCase();
-    if (!needle) return rows;
-
-    return rows.filter((a) => {
-      return (
-        String(a.albumName || "").toLowerCase().includes(needle) ||
-        String(a.artist || "").toLowerCase().includes(needle)
-      );
-    });
-  }, [purchases, q]);
+  }, [purchases]);
 
   const [activeProductId, setActiveProductId] = useState(() => {
     const saved = localStorage.getItem(ACTIVE_KEY);
@@ -62,7 +51,6 @@ export default function MyAccount() {
   const setModeAndPersist = (next) => {
     setMode(next);
     localStorage.setItem(MODE_KEY, next);
-    // (Mode -> player wiring is next; for now we persist only)
   };
 
   const pickAlbum = (id) => {
@@ -72,39 +60,22 @@ export default function MyAccount() {
 
   const playTrackNow = (trackId) => {
     if (!activeAlbum?.id || !trackId) return;
-
-    // ✅ Direct command to App.jsx (global bottom player)
     window.dispatchEvent(
-      new CustomEvent("blackout:play", {
-        detail: { productId: activeAlbum.id, trackId },
-      })
+      new CustomEvent("blackout:play", { detail: { productId: activeAlbum.id, trackId } })
     );
   };
 
   return (
     <div style={{ color: "white", fontFamily: "system-ui" }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-        <h1 style={{ marginTop: 0, marginBottom: 6 }}>Account</h1>
-        <div style={{ fontSize: 12, opacity: 0.75 }}>My Collection</div>
-      </div>
-
-      {/* Search */}
-      <div style={{ marginTop: 10 }}>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search your collection…"
-          style={searchInput}
-        />
-      </div>
+      <h1 style={{ marginTop: 0, marginBottom: 8 }}>Account</h1>
 
       {/* Thumbnails */}
-      <div style={{ marginTop: 14, ...card }}>
+      <div style={{ marginTop: 10, ...card }}>
         <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>My Collection</div>
 
         {!albums.length ? (
           <div style={{ opacity: 0.75, fontSize: 13, lineHeight: 1.5 }}>
-            No albums yet. Go to <b>Shop</b>, hit Buy, confirm on Sold page — then you’ll see it here.
+            No albums yet. Buy one in Shop, confirm on Sold page — it will appear here.
           </div>
         ) : (
           <div style={thumbRow}>
@@ -120,7 +91,6 @@ export default function MyAccount() {
                     background: isActive ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
                     opacity: isActive ? 1 : 0.9,
                   }}
-                  title={`${a.albumName} — ${a.artist}`}
                 >
                   <img
                     src={a.coverUrl}
@@ -133,31 +103,8 @@ export default function MyAccount() {
                       border: "1px solid rgba(255,255,255,0.12)",
                     }}
                   />
-                  <div
-                    style={{
-                      marginTop: 8,
-                      fontWeight: 950,
-                      fontSize: 12,
-                      maxWidth: 110,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {a.albumName}
-                  </div>
-                  <div
-                    style={{
-                      opacity: 0.7,
-                      fontSize: 12,
-                      maxWidth: 110,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {a.artist}
-                  </div>
+                  <div style={thumbTitle}>{a.albumName}</div>
+                  <div style={thumbSub}>{a.artist}</div>
                 </button>
               );
             })}
@@ -165,7 +112,7 @@ export default function MyAccount() {
         )}
       </div>
 
-      {/* Mode card */}
+      {/* Mode */}
       <div style={{ marginTop: 14, ...card }}>
         <div style={{ fontWeight: 950, fontSize: 14, opacity: 0.92, marginBottom: 10 }}>Mode</div>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -184,36 +131,29 @@ export default function MyAccount() {
             <span>Smart Bridge</span>
           </label>
 
-          <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>
-            (Mode → player wiring next)
-          </div>
+          <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>(wiring next)</div>
         </div>
       </div>
 
       {/* Two-column */}
       <div style={{ marginTop: 14, ...pageCard }}>
         <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16 }}>
-          {/* Left: big art */}
+          {/* Left cover */}
           <div style={card}>
             <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.9 }}>Cover</div>
             {activeAlbum ? (
               <img
                 src={activeAlbum.coverUrl}
                 alt="cover"
-                style={{
-                  width: "100%",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                }}
+                style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)" }}
               />
             ) : (
               <div style={{ opacity: 0.75 }}>No active album selected.</div>
             )}
           </div>
 
-          {/* Right: 3 cards */}
+          {/* Right cards */}
           <div style={{ display: "grid", gap: 16 }}>
-            {/* Album info */}
             <div style={card}>
               <div style={{ fontWeight: 1000, fontSize: 18 }}>{activeAlbum?.albumName || "—"}</div>
               <div style={{ opacity: 0.85, marginTop: 4 }}>{activeAlbum?.artist || ""}</div>
@@ -222,18 +162,6 @@ export default function MyAccount() {
               </div>
             </div>
 
-            {/* Mini nav placeholders */}
-            <div style={card}>
-              <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>Navigation</div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <div style={pill}>My Collection</div>
-                <div style={pillMuted}>Playlist</div>
-                <div style={pillMuted}>Swag</div>
-                <div style={pillMuted}>Other</div>
-              </div>
-            </div>
-
-            {/* Tracks (click = play now) */}
             <div style={card}>
               <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>Album Tracks</div>
 
@@ -242,21 +170,14 @@ export default function MyAccount() {
               ) : (
                 <div style={{ display: "grid", gap: 8 }}>
                   {tracks.map((t, idx) => (
-                    <button
-                      key={t.id || idx}
-                      style={trackRow}
-                      onClick={() => playTrackNow(t.id)}
-                      title="Play"
-                    >
+                    <button key={t.id || idx} style={trackRow} onClick={() => playTrackNow(t.id)} title="Play">
                       <span style={{ fontWeight: 950 }}>{t.title}</span>
                     </button>
                   ))}
                 </div>
               )}
 
-              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-                Click a track to play (full length).
-              </div>
+              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>Click a track to play (full).</div>
             </div>
           </div>
         </div>
@@ -279,34 +200,9 @@ const card = {
   background: "rgba(255,255,255,0.04)",
 };
 
-const searchInput = {
-  width: "60%",
-  minWidth: 320,
-  maxWidth: 720,
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "rgba(0,0,0,0.25)",
-  color: "white",
-  outline: "none",
-  fontSize: 15,
-  fontWeight: 800,
-};
+const radioRow = { display: "flex", gap: 8, alignItems: "center", fontWeight: 950, opacity: 0.9 };
 
-const radioRow = {
-  display: "flex",
-  gap: 8,
-  alignItems: "center",
-  fontWeight: 950,
-  opacity: 0.9,
-};
-
-const thumbRow = {
-  display: "flex",
-  gap: 12,
-  overflowX: "auto",
-  paddingBottom: 6,
-};
+const thumbRow = { display: "flex", gap: 12, overflowX: "auto", paddingBottom: 6 };
 
 const thumbBtn = {
   cursor: "pointer",
@@ -319,30 +215,29 @@ const thumbBtn = {
   flex: "0 0 auto",
 };
 
-const pill = {
-  fontSize: 12,
+const thumbTitle = {
+  marginTop: 8,
   fontWeight: 950,
-  padding: "7px 10px",
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.10)",
-  color: "white",
+  fontSize: 12,
+  maxWidth: 110,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
-const pillMuted = {
-  ...pill,
-  opacity: 0.75,
-  background: "rgba(255,255,255,0.05)",
+const thumbSub = {
+  opacity: 0.7,
+  fontSize: 12,
+  maxWidth: 110,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const trackRow = {
   cursor: "pointer",
   width: "100%",
   textAlign: "left",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
   padding: "10px 12px",
   borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.14)",

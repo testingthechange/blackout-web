@@ -10,16 +10,25 @@ export default function BottomPlayer({
   onToggleShuffle,
   repeat,
   onToggleRepeat,
+  mode = "preview", // "preview" | "full"
   previewSeconds = 30,
-  paid = false,
 }) {
   const audioRef = useRef(null);
 
   const [duration, setDuration] = useState(0);
   const [pos, setPos] = useState(0);
 
+  const isFull = mode === "full";
   const title = useMemo(() => (track ? track.title || "Untitled" : "No track selected"), [track]);
-  const src = track?.previewUrl || track?.url || "";
+
+  // ✅ Source selection depends on page mode
+  // preview: prefer previewUrl
+  // full: prefer url (owned)
+  const src = useMemo(() => {
+    if (!track) return "";
+    if (isFull) return track.url || track.previewUrl || "";
+    return track.previewUrl || track.url || "";
+  }, [track, isFull]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -52,7 +61,8 @@ export default function BottomPlayer({
       const t = el.currentTime || 0;
       setPos(t);
 
-      if (!paid && previewSeconds && t >= previewSeconds) {
+      // ✅ preview cap only in preview mode
+      if (!isFull && previewSeconds && t >= previewSeconds) {
         el.pause();
         el.currentTime = 0;
         setPos(0);
@@ -78,17 +88,17 @@ export default function BottomPlayer({
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("ended", onEnded);
     };
-  }, [onPlayPause, onNext, previewSeconds, paid, repeat]);
+  }, [onPlayPause, onNext, previewSeconds, isFull, repeat]);
 
   const shownDuration = useMemo(() => {
-    if (!paid && previewSeconds) return Math.min(duration || previewSeconds, previewSeconds);
+    if (!isFull && previewSeconds) return Math.min(duration || previewSeconds, previewSeconds);
     return duration || 0;
-  }, [duration, paid, previewSeconds]);
+  }, [duration, isFull, previewSeconds]);
 
   const shownPos = useMemo(() => {
-    if (!paid && previewSeconds) return Math.min(pos || 0, previewSeconds);
+    if (!isFull && previewSeconds) return Math.min(pos || 0, previewSeconds);
     return pos || 0;
-  }, [pos, paid, previewSeconds]);
+  }, [pos, isFull, previewSeconds]);
 
   const fmt = (s) => {
     if (!Number.isFinite(s) || s < 0) return "0:00";
@@ -100,7 +110,6 @@ export default function BottomPlayer({
   const scrubTo = (next) => {
     const el = audioRef.current;
     if (!el) return;
-
     const max = shownDuration || 0;
     const clamped = Math.max(0, Math.min(next, max));
     el.currentTime = clamped;
@@ -110,12 +119,25 @@ export default function BottomPlayer({
   return (
     <div style={wrap}>
       <div style={inner}>
-        <button onClick={() => onPlayPause(!isPlaying)} style={playBtn} aria-label="Play / Pause" disabled={!src}>
+        {/* Left: Play/Pause */}
+        <button
+          onClick={() => onPlayPause(!isPlaying)}
+          style={playBtn}
+          aria-label="Play / Pause"
+          disabled={!src}
+          title={isFull ? "Full" : "Preview"}
+        >
           {isPlaying ? "❚❚" : "▶"}
         </button>
 
+        {/* Middle: title + scrub */}
         <div style={mid}>
-          <div style={titleStyle}>{title}</div>
+          <div style={titleStyle}>
+            {title}
+            <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.65, fontWeight: 900 }}>
+              {isFull ? "FULL" : `PREVIEW ${previewSeconds}s`}
+            </span>
+          </div>
 
           <div style={barRow}>
             <div style={timeText}>{fmt(shownPos)}</div>
@@ -134,6 +156,7 @@ export default function BottomPlayer({
           </div>
         </div>
 
+        {/* Right: Shuffle Repeat Prev Next */}
         <div style={rightControls}>
           <button onClick={onToggleShuffle} style={{ ...pillBtn, opacity: shuffle ? 1 : 0.75 }} aria-label="Shuffle">
             Shuffle
@@ -216,10 +239,7 @@ const timeText = {
   flex: "0 0 auto",
 };
 
-const range = {
-  flex: 1,
-  width: "100%",
-};
+const range = { flex: 1, width: "100%" };
 
 const rightControls = {
   display: "flex",

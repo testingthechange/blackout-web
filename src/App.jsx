@@ -1,10 +1,12 @@
 import { Routes, Route, Navigate, Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
+
 import Shop from "./pages/Shop.jsx";
 import Product from "./pages/Product.jsx";
 import Sold from "./pages/Sold.jsx";
 import Login from "./pages/Login.jsx";
 import MyAccount from "./pages/MyAccount.jsx";
+
 import BottomPlayer from "./components/BottomPlayer.jsx";
 import { getProduct } from "./data/catalog.js";
 
@@ -27,27 +29,38 @@ function RequireAuth({ children }) {
   return children;
 }
 
-function NavLink({ to, children }) {
+function TopNav() {
   const loc = useLocation();
-  const active = loc.pathname === to;
+
+  const item = (to, label) => {
+    const active = loc.pathname === to || (to === "/shop" && loc.pathname.startsWith("/shop"));
+    return (
+      <Link
+        to={to}
+        style={{
+          textDecoration: "none",
+          color: "white",
+          fontFamily: "system-ui",
+          fontWeight: 950,
+          fontSize: 12,
+          padding: "8px 10px",
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,0.14)",
+          background: active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)",
+          opacity: active ? 1 : 0.88,
+        }}
+      >
+        {label}
+      </Link>
+    );
+  };
+
   return (
-    <Link
-      to={to}
-      style={{
-        display: "block",
-        textDecoration: "none",
-        color: "white",
-        fontFamily: "system-ui",
-        fontWeight: 900,
-        padding: "10px 12px",
-        borderRadius: 10,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: active ? "rgba(255,255,255,0.12)" : "transparent",
-        opacity: active ? 1 : 0.82,
-      }}
-    >
-      {children}
-    </Link>
+    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      {item("/", "Home")}
+      {item("/shop", "Shop")}
+      {item("/account", "Account")}
+    </div>
   );
 }
 
@@ -56,19 +69,19 @@ export default function App() {
   const nav = useNavigate();
   const { isAuthed, setIsAuthed } = useAuth();
 
-  // ✅ Preview vs Full mode
-  // Shop + Product = preview capped
-  // Account = full (no cap)
-  const paidMode = loc.pathname.startsWith("/account");
+  // ✅ Player behavior is page-based:
+  // - Shop/Product = preview mode (30s)
+  // - Account = full mode
+  const playerMode = loc.pathname.startsWith("/account") ? "full" : "preview";
+
+  // Global search UI (same on all pages). Not wired to filtering yet.
+  const [globalSearch, setGlobalSearch] = useState("");
 
   // Phase 0 ping
   const [backendStatus, setBackendStatus] = useState("checking");
   useEffect(() => {
     const base = import.meta.env.VITE_ALBUM_BACKEND_URL;
-    if (!base) {
-      setBackendStatus("missing");
-      return;
-    }
+    if (!base) return setBackendStatus("missing");
     fetch(`${base}/api/health`)
       .then((res) => setBackendStatus(res.ok ? "ok" : "fail"))
       .catch(() => setBackendStatus("fail"));
@@ -88,10 +101,9 @@ export default function App() {
   // keep activeTrackId valid when product changes
   useEffect(() => {
     if (!tracks.length) return;
-    if (!tracks.some((t) => t.id === activeTrackId)) {
-      setActiveTrackId(tracks[0].id);
-    }
-  }, [activeProductId]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!tracks.some((t) => t.id === activeTrackId)) setActiveTrackId(tracks[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProductId]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [shuffle, setShuffle] = useState(false);
@@ -127,7 +139,7 @@ export default function App() {
     nav(`/sold?productId=${encodeURIComponent(productId)}`);
   };
 
-  // ✅ Account -> App play command bridge
+  // ✅ Account -> App play bridge
   useEffect(() => {
     const handler = (e) => {
       const d = e?.detail || {};
@@ -140,28 +152,19 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 30% 20%, #0b1633 0%, #060a16 55%, #04060c 100%)" }}>
+    <div style={bg}>
       {/* pad bottom so content doesn't hide behind player */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 130px" }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 900, letterSpacing: 0.3 }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "16px 16px 140px" }}>
+        {/* Header row */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 1000, letterSpacing: 0.2 }}>
               Block Radius
             </div>
-            <div
-              style={{
-                fontFamily: "system-ui",
-                fontSize: 12,
-                fontWeight: 900,
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(255,255,255,0.06)",
-                color: "white",
-                opacity: 0.9,
-              }}
-            >
+
+            <TopNav />
+
+            <div style={badge}>
               Backend:{" "}
               {backendStatus === "checking" && "…"}
               {backendStatus === "ok" && "OK"}
@@ -191,64 +194,52 @@ export default function App() {
           )}
         </div>
 
-        {/* Main */}
-        <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
-          <div style={sideNav}>
-            <div style={navHeader}>Public</div>
-            <div style={{ display: "grid", gap: 10 }}>
-              <NavLink to="/shop">Shop</NavLink>
-            </div>
+        {/* Global search (under login area, same everywhere) */}
+        <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+          <input
+            value={globalSearch}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            placeholder="Search"
+            style={globalSearchInput}
+          />
+        </div>
 
-            <div style={{ height: 14 }} />
+        {/* Main content */}
+        <div style={{ marginTop: 14 }}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/shop" replace />} />
+            <Route path="/shop" element={<Shop />} />
+            <Route
+              path="/shop/:productId"
+              element={
+                <Product
+                  activeTrackId={activeTrackId}
+                  setActiveTrackId={(id) => {
+                    setActiveTrackId(id);
+                    setIsPlaying(true);
+                  }}
+                  onBuy={onBuy}
+                />
+              }
+            />
+            <Route path="/sold" element={<Sold />} />
+            <Route path="/login" element={<Login />} />
 
-            <div style={navHeader}>Internal</div>
-            {!isAuthed ? (
-              <div style={{ color: "white", opacity: 0.65, fontFamily: "system-ui", fontSize: 12, lineHeight: 1.4 }}>
-                Login to access internal pages.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                <NavLink to="/account">Account</NavLink>
-              </div>
-            )}
-          </div>
+            <Route
+              path="/account"
+              element={
+                <RequireAuth>
+                  <MyAccount />
+                </RequireAuth>
+              }
+            />
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Routes>
-              <Route path="/" element={<Navigate to="/shop" replace />} />
-              <Route path="/shop" element={<Shop />} />
-              <Route
-                path="/shop/:productId"
-                element={
-                  <Product
-                    activeTrackId={activeTrackId}
-                    setActiveTrackId={(id) => {
-                      setActiveTrackId(id);
-                      setIsPlaying(true);
-                    }}
-                    onBuy={onBuy}
-                  />
-                }
-              />
-              <Route path="/sold" element={<Sold />} />
-              <Route path="/login" element={<Login />} />
-
-              <Route
-                path="/account"
-                element={
-                  <RequireAuth>
-                    <MyAccount />
-                  </RequireAuth>
-                }
-              />
-
-              <Route path="*" element={<Navigate to="/shop" replace />} />
-            </Routes>
-          </div>
+            <Route path="*" element={<Navigate to="/shop" replace />} />
+          </Routes>
         </div>
       </div>
 
-      {/* Global Bottom Freeze Player */}
+      {/* Bottom Freeze Player (UI same, behavior by page mode) */}
       <BottomPlayer
         track={activeTrack}
         isPlaying={isPlaying}
@@ -259,37 +250,48 @@ export default function App() {
         onToggleShuffle={() => setShuffle((v) => !v)}
         repeat={repeat}
         onToggleRepeat={() => setRepeat((v) => !v)}
+        mode={playerMode}     // ✅ "preview" on shop, "full" on account
         previewSeconds={30}
-        paid={paidMode} // ✅ account full, shop preview
       />
     </div>
   );
 }
 
+const bg = {
+  minHeight: "100vh",
+  background: "radial-gradient(circle at 30% 20%, rgba(12,22,40,1) 0%, rgba(8,10,16,1) 55%, rgba(6,7,10,1) 100%)",
+};
+
 const topBtn = {
   cursor: "pointer",
   color: "white",
-  fontWeight: 900,
-  padding: "10px 14px",
+  fontWeight: 950,
+  padding: "9px 12px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
 };
 
-const sideNav = {
-  width: 220,
-  flexShrink: 0,
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 14,
-  padding: 12,
-  height: "fit-content",
-  background: "rgba(255,255,255,0.04)",
+const badge = {
+  fontFamily: "system-ui",
+  fontSize: 12,
+  fontWeight: 950,
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  opacity: 0.9,
 };
 
-const navHeader = {
+const globalSearchInput = {
+  width: "320px",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(0,0,0,0.25)",
   color: "white",
-  fontFamily: "system-ui",
+  outline: "none",
+  fontSize: 13,
   fontWeight: 900,
-  opacity: 0.85,
-  marginBottom: 10,
 };
