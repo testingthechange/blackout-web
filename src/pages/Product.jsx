@@ -25,28 +25,26 @@ export default function Product({ activeTrackId, setActiveTrackId, onBuy }) {
         <Link to="/shop" style={{ color: "white", opacity: 0.85 }}>← Back</Link>
       </div>
 
-      {/* LEFT COLUMN WIDER THAN RIGHT */}
+      {/* LEFT COLUMN WIDER */}
       <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16 }}>
-        {/* Left card = cover + metadata */}
+        {/* Left: Cover + Meta */}
         <div style={card}>
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>Meta / Cover</div>
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>Album</div>
           <img
             src={product.coverUrl}
             alt="cover"
             style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)" }}
           />
-          <div style={{ marginTop: 12, fontSize: 12, opacity: 0.8, lineHeight: 1.55 }}>
+          <div style={{ marginTop: 12, fontSize: 12, opacity: 0.82, lineHeight: 1.55 }}>
+            <div style={{ opacity: 0.9, fontWeight: 900 }}>Meta (phase 0)</div>
             <div>productId: <span style={{ opacity: 0.95 }}>{product.id}</span></div>
             <div>release: <span style={{ opacity: 0.95 }}>{product.releaseDate}</span></div>
-            <div style={{ marginTop: 8, opacity: 0.75 }}>
-              Phase 0 note: keep “meta ping” ready (future images/videos/docs).
-            </div>
           </div>
         </div>
 
         {/* Right column */}
         <div style={{ display: "grid", gap: 16 }}>
-          {/* Top card = album info */}
+          {/* Album info */}
           <div style={card}>
             <div style={{ fontWeight: 950, fontSize: 18 }}>{product.albumName}</div>
             <div style={{ opacity: 0.85, marginTop: 4 }}>{product.artist}</div>
@@ -55,45 +53,24 @@ export default function Product({ activeTrackId, setActiveTrackId, onBuy }) {
             </div>
           </div>
 
-          {/* Middle split into 3 cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <div style={card}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>Buy</div>
-              <button style={btn} onClick={() => onBuy(product.id)}>
-                Buy (dummy)
-              </button>
-              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 10 }}>
-                Goes to Sold → confirm → populates Account.
-              </div>
-            </div>
+          {/* BUY card only */}
+          <div style={card}>
+            <div style={{ fontWeight: 950, fontSize: 16, marginBottom: 12 }}>Buy</div>
 
-            <div style={card}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>Wire: Releases Data</div>
-              <div style={{ fontSize: 12, opacity: 0.82, lineHeight: 1.5 }}>
-                Buy unlocks:
-                <ul style={{ margin: "8px 0 0 18px" }}>
-                  <li>Account / My Collection</li>
-                  <li>Playlist formats (future)</li>
-                  <li>NFT unlock + SmartBridge (future)</li>
-                  <li>Swag / downloads (future)</li>
-                </ul>
-              </div>
-            </div>
+            <button
+              style={buyBtn}
+              onClick={() => onBuy(product.id)}
+              aria-label="Buy album"
+            >
+              BUY $17
+            </button>
 
-            <div style={card}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>Distribution Hooks</div>
-              <div style={{ fontSize: 12, opacity: 0.82, lineHeight: 1.5 }}>
-                Future safe-add modules:
-                <ul style={{ margin: "8px 0 0 18px" }}>
-                  <li>Collectors / metaverse link</li>
-                  <li>External apps / APIs</li>
-                  <li>Non-music pages isolated</li>
-                </ul>
-              </div>
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+              Preview player only. Purchase is simulated on the next screen.
             </div>
           </div>
 
-          {/* Bottom card = tracks */}
+          {/* Tracks */}
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Album Tracks</div>
             <div style={{ display: "grid", gap: 8 }}>
@@ -133,16 +110,19 @@ const card = {
   background: "rgba(255,255,255,0.04)",
 };
 
-const btn = {
+const buyBtn = {
   cursor: "pointer",
-  color: "white",
-  fontWeight: 950,
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.06)",
-  fontFamily: "system-ui",
   width: "100%",
+  height: 56,
+  borderRadius: 12,
+  border: "1px solid rgba(0,0,0,0.35)",
+  background: "linear-gradient(180deg, rgba(45,215,120,1) 0%, rgba(20,160,85,1) 100%)",
+  color: "white",
+  fontFamily: "system-ui",
+  fontWeight: 1000,
+  fontSize: 18,
+  letterSpacing: 0.6,
+  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
 
 const trackBtn = {
