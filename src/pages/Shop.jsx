@@ -1,66 +1,61 @@
 import { Link } from "react-router-dom";
+import { CATALOG } from "../data/catalog";
 
 export default function Shop() {
+  const p = CATALOG[0];
+
   return (
     <div style={{ color: "white", fontFamily: "system-ui" }}>
-      <h1 style={{ marginTop: 0, fontSize: 44, letterSpacing: -0.6 }}>Shop</h1>
-      <p style={{ opacity: 0.85, maxWidth: 720, lineHeight: 1.5 }}>
-        Shell first. Next step: pull data from S3 catalog index and render real releases.
-      </p>
+      <h1 style={{ marginTop: 0 }}>Shop</h1>
 
       <div
         style={{
-          marginTop: 22,
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gridTemplateColumns: "1fr 1fr",
           gap: 16,
+          alignItems: "stretch",
         }}
       >
-        <div
-          style={{
-            border: "1px solid rgba(255,255,255,0.14)",
-            borderRadius: 14,
-            padding: 18,
-            background: "rgba(255,255,255,0.06)",
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 18 }}>Test Release</div>
-          <div style={{ opacity: 0.75, marginTop: 6 }}>shareId: 2b5b538e60429a31</div>
+        <div style={card}>
+          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>Featured</div>
+          <img
+            src={p.coverUrl}
+            alt="cover"
+            style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)" }}
+          />
+        </div>
 
-          <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link
-              to="/play?shareId=2b5b538e60429a31"
-              style={{
-                textDecoration: "none",
-                color: "white",
-                fontWeight: 800,
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.18)",
-                background: "rgba(255,255,255,0.10)",
-              }}
-            >
-              Preview
-            </Link>
+        <div style={card}>
+          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>{p.albumName}</div>
+          <div style={{ opacity: 0.85, marginBottom: 12 }}>{p.artist}</div>
 
-            <button
-              onClick={() => alert("Next: checkout/unlock flow (stub)")}
-              style={{
-                cursor: "pointer",
-                color: "white",
-                fontWeight: 800,
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.18)",
-                background: "rgba(255,255,255,0.06)",
-                opacity: 0.95,
-              }}
-            >
-              Unlock
-            </button>
+          <Link to={`/shop/${p.id}`} style={linkBtn}>
+            Go to Product Page →
+          </Link>
+
+          <div style={{ marginTop: 14, fontSize: 12, opacity: 0.75 }}>
+            Phase 1: product page + preview player. Buy is dummy.
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+const card = {
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 14,
+  padding: 14,
+  background: "rgba(255,255,255,0.04)",
+};
+
+const linkBtn = {
+  display: "inline-block",
+  textDecoration: "none",
+  color: "white",
+  fontWeight: 900,
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.06)",
+};
