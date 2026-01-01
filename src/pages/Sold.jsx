@@ -1,54 +1,79 @@
-import { useMemo } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { getProduct } from "../data/catalog";
+import React, { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { getProduct } from "../data/catalog.js";
 
-const LS_KEY = "blackout_purchases_v1";
+const PURCHASES_KEY = "blackout:purchases";
 
-function loadPurchases() {
+function safeParse(json) {
   try {
-    return JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+    return JSON.parse(json);
   } catch {
-    return [];
+    return null;
   }
 }
 
-function savePurchases(items) {
-  localStorage.setItem(LS_KEY, JSON.stringify(items));
+function loadPurchases() {
+  const raw = localStorage.getItem(PURCHASES_KEY);
+  const parsed = raw ? safeParse(raw) : null;
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function savePurchases(rows) {
+  localStorage.setItem(PURCHASES_KEY, JSON.stringify(Array.isArray(rows) ? rows : []));
+}
+
+function useQuery() {
+  const loc = useLocation();
+  return useMemo(() => new URLSearchParams(loc.search), [loc.search]);
 }
 
 export default function Sold() {
   const nav = useNavigate();
-  const [sp] = useSearchParams();
-  const productId = sp.get("productId") || "";
-  const product = useMemo(() => getProduct(productId), [productId]);
+  const q = useQuery();
+
+  const productId = String(q.get("productId") || "").trim() || "album-001";
+  const product = getProduct(productId);
+
+  const [done, setDone] = useState(false);
+
+  const confirm = () => {
+    const rows = loadPurchases();
+    const exists = rows.some((r) => String(r?.productId) === String(productId));
+    const next = exists
+      ? rows
+      : [{ productId, purchasedAt: new Date().toISOString() }, ...rows];
+
+    savePurchases(next);
+    setDone(true);
+
+    // route to Account
+    nav("/account");
+  };
 
   return (
     <div style={{ color: "white", fontFamily: "system-ui" }}>
-      <h1 style={{ marginTop: 0 }}>Sold (Dummy)</h1>
+      <h1 style={{ marginTop: 0 }}>Sold</h1>
 
       <div style={card}>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>
-          {product ? product.albumName : "Unknown Product"}
-        </div>
+        <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 10 }}>Confirm Purchase</div>
+
         <div style={{ opacity: 0.85, marginBottom: 12 }}>
-          Click confirm to add to Account / My Collection (localStorage for now).
+          {product ? (
+            <>
+              <div style={{ fontWeight: 900 }}>{product.albumName}</div>
+              <div style={{ opacity: 0.75 }}>{product.artist}</div>
+            </>
+          ) : (
+            <div style={{ opacity: 0.75 }}>Unknown product: {productId}</div>
+          )}
         </div>
 
-        <button
-          style={btn}
-          onClick={() => {
-            if (!product) return;
-            const existing = loadPurchases();
-            const next = Array.from(new Set([product.id, ...existing]));
-            savePurchases(next);
-            nav("/account");
-          }}
-        >
-          Confirm → Add to My Collection
+        <button onClick={confirm} style={primaryBtn} disabled={done}>
+          {done ? "Added to Account ✓" : "Confirm Purchase"}
         </button>
 
-        <div style={{ marginTop: 12 }}>
-          <Link to="/shop" style={{ color: "white", opacity: 0.85 }}>Back to Shop</Link>
+        <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>
+          This is a dummy purchase step. It adds the album to <b>Account → My Collection</b>.
         </div>
       </div>
     </div>
@@ -60,17 +85,15 @@ const card = {
   borderRadius: 14,
   padding: 14,
   background: "rgba(255,255,255,0.04)",
-  maxWidth: 640,
+  maxWidth: 720,
 };
 
-const btn = {
+const primaryBtn = {
   cursor: "pointer",
   color: "white",
   fontWeight: 900,
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.06)",
-  fontFamily: "system-ui",
-  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.22)",
+  background: "rgba(34,197,94,0.28)", // subtle green
 };
