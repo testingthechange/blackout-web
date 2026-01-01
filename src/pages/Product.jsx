@@ -25,7 +25,8 @@ export default function Product({ activeTrackId, setActiveTrackId, onBuy }) {
         <Link to="/shop" style={{ color: "white", opacity: 0.85 }}>← Back</Link>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 16 }}>
+      {/* LEFT COLUMN WIDER THAN RIGHT */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16 }}>
         {/* Left card = cover + metadata */}
         <div style={card}>
           <div style={{ fontWeight: 900, marginBottom: 10 }}>Meta / Cover</div>
@@ -54,9 +55,8 @@ export default function Product({ activeTrackId, setActiveTrackId, onBuy }) {
             </div>
           </div>
 
-          {/* Middle card split into 3 cards */}
+          {/* Middle split into 3 cards */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            {/* Buy */}
             <div style={card}>
               <div style={{ fontWeight: 900, marginBottom: 10 }}>Buy</div>
               <button style={btn} onClick={() => onBuy(product.id)}>
@@ -67,7 +67,6 @@ export default function Product({ activeTrackId, setActiveTrackId, onBuy }) {
               </div>
             </div>
 
-            {/* Wire plan */}
             <div style={card}>
               <div style={{ fontWeight: 900, marginBottom: 10 }}>Wire: Releases Data</div>
               <div style={{ fontSize: 12, opacity: 0.82, lineHeight: 1.5 }}>
@@ -81,7 +80,6 @@ export default function Product({ activeTrackId, setActiveTrackId, onBuy }) {
               </div>
             </div>
 
-            {/* Extra distribution placeholders */}
             <div style={card}>
               <div style={{ fontWeight: 900, marginBottom: 10 }}>Distribution Hooks</div>
               <div style={{ fontSize: 12, opacity: 0.82, lineHeight: 1.5 }}>

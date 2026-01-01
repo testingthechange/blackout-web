@@ -55,6 +55,9 @@ export default function App() {
   const nav = useNavigate();
   const { isAuthed, setIsAuthed } = useAuth();
 
+  // global search (same size + same place on all pages)
+  const [searchQuery, setSearchQuery] = useState("");
+
   // Phase 0 ping
   const [backendStatus, setBackendStatus] = useState("checking");
   useEffect(() => {
@@ -74,7 +77,10 @@ export default function App() {
 
   const tracks = product?.tracks || [];
   const [activeTrackId, setActiveTrackId] = useState(tracks[0]?.id || null);
-  const activeTrack = useMemo(() => tracks.find((t) => t.id === activeTrackId) || tracks[0] || null, [tracks, activeTrackId]);
+  const activeTrack = useMemo(
+    () => tracks.find((t) => t.id === activeTrackId) || tracks[0] || null,
+    [tracks, activeTrackId]
+  );
 
   // keep activeTrackId valid when product changes
   useEffect(() => {
@@ -82,7 +88,8 @@ export default function App() {
     if (!tracks.some((t) => t.id === activeTrackId)) {
       setActiveTrackId(tracks[0].id);
     }
-  }, [activeProductId]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProductId]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [shuffle, setShuffle] = useState(false);
@@ -119,11 +126,16 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 30% 20%, #0b1633 0%, #060a16 55%, #04060c 100%)" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "radial-gradient(circle at 30% 20%, #0b1633 0%, #060a16 55%, #04060c 100%)",
+      }}
+    >
       {/* pad bottom so content doesn't hide behind player */}
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 110px" }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 900, letterSpacing: 0.3 }}>
               blackout
@@ -149,25 +161,35 @@ export default function App() {
             </div>
           </div>
 
-          {!isAuthed ? (
-            <button
-              onClick={() => nav(`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`)}
-              style={topBtn}
-            >
-              Login
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                localStorage.removeItem("authToken");
-                setIsAuthed(false);
-                nav("/shop");
-              }}
-              style={topBtn}
-            >
-              Logout
-            </button>
-          )}
+          {/* Right: Login/Logout + Search under it */}
+          <div style={{ display: "grid", justifyItems: "end", gap: 10 }}>
+            {!isAuthed ? (
+              <button
+                onClick={() => nav(`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`)}
+                style={topBtn}
+              >
+                Login
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  localStorage.removeItem("authToken");
+                  setIsAuthed(false);
+                  nav("/shop");
+                }}
+                style={topBtn}
+              >
+                Logout
+              </button>
+            )}
+
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search (phase 1 stub)"
+              style={searchInput}
+            />
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
@@ -244,7 +266,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Global Bottom Freeze Player */}
+      {/* Global Bottom Freeze Player (no scrub) */}
       <BottomPlayer
         track={activeTrack}
         isPlaying={isPlaying}
@@ -269,6 +291,21 @@ const topBtn = {
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
+  fontFamily: "system-ui",
+  width: 140,
+};
+
+const searchInput = {
+  width: 280,
+  height: 40,
+  padding: "0 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  outline: "none",
+  fontFamily: "system-ui",
+  fontWeight: 800,
 };
 
 const sideNav = {
