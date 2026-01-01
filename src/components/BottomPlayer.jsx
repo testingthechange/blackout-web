@@ -6,67 +6,147 @@ export default function BottomPlayer({
   onPlayPause,
   onPrev,
   onNext,
+  shuffle,
+  onToggleShuffle,
+  repeat,
+  onToggleRepeat,
   previewSeconds = 30,
+  paid = false,
 }) {
   const audioRef = useRef(null);
-  const [secondsLeft, setSecondsLeft] = useState(previewSeconds);
 
-  const title = useMemo(
-    () => (track ? track.title || "Untitled" : "No track selected"),
-    [track]
-  );
+  const [duration, setDuration] = useState(0);
+  const [pos, setPos] = useState(0);
+
+  const title = useMemo(() => (track ? track.title || "Untitled" : "No track selected"), [track]);
+  const src = track?.previewUrl || track?.url || "";
 
   useEffect(() => {
     const el = audioRef.current;
-    if (!el || !track?.previewUrl) return;
+    if (!el || !src) return;
 
     el.pause();
-    el.src = track.previewUrl;
+    el.src = src;
     el.currentTime = 0;
     el.load();
+    setPos(0);
+    setDuration(0);
 
-    if (isPlaying) el.play();
-  }, [track?.previewUrl]);
+    if (isPlaying) el.play().catch(() => {});
+  }, [src]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !src) return;
+    if (isPlaying) el.play().catch(() => {});
+    else el.pause();
+  }, [isPlaying, src]);
 
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
-    isPlaying ? el.play() : el.pause();
-  }, [isPlaying]);
 
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
+    const onMeta = () => setDuration(Number.isFinite(el.duration) ? el.duration : 0);
 
     const onTime = () => {
       const t = el.currentTime || 0;
-      const remaining = Math.max(0, Math.ceil(previewSeconds - t));
-      setSecondsLeft(remaining);
-      if (t >= previewSeconds) {
+      setPos(t);
+
+      if (!paid && previewSeconds && t >= previewSeconds) {
         el.pause();
         el.currentTime = 0;
+        setPos(0);
         onPlayPause(false);
       }
     };
 
+    const onEnded = () => {
+      if (repeat) {
+        el.currentTime = 0;
+        el.play().catch(() => {});
+      } else {
+        onNext?.();
+      }
+    };
+
+    el.addEventListener("loadedmetadata", onMeta);
     el.addEventListener("timeupdate", onTime);
-    return () => el.removeEventListener("timeupdate", onTime);
-  }, [previewSeconds, onPlayPause]);
+    el.addEventListener("ended", onEnded);
+
+    return () => {
+      el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("ended", onEnded);
+    };
+  }, [onPlayPause, onNext, previewSeconds, paid, repeat]);
+
+  const shownDuration = useMemo(() => {
+    if (!paid && previewSeconds) return Math.min(duration || previewSeconds, previewSeconds);
+    return duration || 0;
+  }, [duration, paid, previewSeconds]);
+
+  const shownPos = useMemo(() => {
+    if (!paid && previewSeconds) return Math.min(pos || 0, previewSeconds);
+    return pos || 0;
+  }, [pos, paid, previewSeconds]);
+
+  const fmt = (s) => {
+    if (!Number.isFinite(s) || s < 0) return "0:00";
+    const m = Math.floor(s / 60);
+    const r = Math.floor(s % 60);
+    return `${m}:${String(r).padStart(2, "0")}`;
+  };
+
+  const scrubTo = (next) => {
+    const el = audioRef.current;
+    if (!el) return;
+
+    const max = shownDuration || 0;
+    const clamped = Math.max(0, Math.min(next, max));
+    el.currentTime = clamped;
+    setPos(clamped);
+  };
 
   return (
     <div style={wrap}>
       <div style={inner}>
-        <div style={controls}>
-          <button onClick={onPrev} style={iconBtn}>‹‹</button>
-          <button onClick={() => onPlayPause(!isPlaying)} style={playBtn}>
-            {isPlaying ? "❚❚" : "▶"}
-          </button>
-          <button onClick={onNext} style={iconBtn}>››</button>
+        <button onClick={() => onPlayPause(!isPlaying)} style={playBtn} aria-label="Play / Pause" disabled={!src}>
+          {isPlaying ? "❚❚" : "▶"}
+        </button>
+
+        <div style={mid}>
+          <div style={titleStyle}>{title}</div>
+
+          <div style={barRow}>
+            <div style={timeText}>{fmt(shownPos)}</div>
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0, shownDuration || 0)}
+              step={0.1}
+              value={shownPos}
+              onChange={(e) => scrubTo(Number(e.target.value))}
+              style={range}
+              aria-label="Scrub"
+              disabled={!src}
+            />
+            <div style={timeText}>{fmt(shownDuration)}</div>
+          </div>
         </div>
 
-        <div style={info}>
-          <div style={titleStyle}>{title}</div>
-          <div style={sub}>Preview: {secondsLeft}s</div>
+        <div style={rightControls}>
+          <button onClick={onToggleShuffle} style={{ ...pillBtn, opacity: shuffle ? 1 : 0.75 }} aria-label="Shuffle">
+            Shuffle
+          </button>
+          <button onClick={onToggleRepeat} style={{ ...pillBtn, opacity: repeat ? 1 : 0.75 }} aria-label="Repeat">
+            Repeat
+          </button>
+          <button onClick={onPrev} style={iconBtn} aria-label="Previous">
+            ‹‹
+          </button>
+          <button onClick={onNext} style={iconBtn} aria-label="Next">
+            ››
+          </button>
         </div>
 
         <audio ref={audioRef} />
@@ -91,22 +171,7 @@ const inner = {
   margin: "0 auto",
   display: "flex",
   alignItems: "center",
-  gap: 16,
-};
-
-const controls = {
-  display: "flex",
-  gap: 10,
-};
-
-const iconBtn = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "rgba(255,255,255,0.06)",
-  color: "white",
-  fontWeight: 900,
-  cursor: "pointer",
+  gap: 14,
 };
 
 const playBtn = {
@@ -119,10 +184,12 @@ const playBtn = {
   fontSize: 18,
   fontWeight: 900,
   cursor: "pointer",
+  flex: "0 0 auto",
 };
 
-const info = {
+const mid = {
   flex: 1,
+  minWidth: 0,
   color: "white",
 };
 
@@ -131,9 +198,52 @@ const titleStyle = {
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
+  marginBottom: 8,
 };
 
-const sub = {
+const barRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+};
+
+const timeText = {
   fontSize: 12,
-  opacity: 0.8,
+  opacity: 0.85,
+  fontWeight: 900,
+  width: 44,
+  textAlign: "center",
+  flex: "0 0 auto",
+};
+
+const range = {
+  flex: 1,
+  width: "100%",
+};
+
+const rightControls = {
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+  flex: "0 0 auto",
+};
+
+const iconBtn = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const pillBtn = {
+  padding: "10px 12px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
 };

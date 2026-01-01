@@ -27,22 +27,23 @@ function RequireAuth({ children }) {
   return children;
 }
 
-function TopNavLink({ to, children }) {
+function NavLink({ to, children }) {
   const loc = useLocation();
-  const active = loc.pathname === to || (to !== "/" && loc.pathname.startsWith(to));
+  const active = loc.pathname === to;
   return (
     <Link
       to={to}
       style={{
+        display: "block",
         textDecoration: "none",
         color: "white",
         fontFamily: "system-ui",
         fontWeight: 900,
         padding: "10px 12px",
-        borderRadius: 12,
+        borderRadius: 10,
         border: "1px solid rgba(255,255,255,0.10)",
-        background: active ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
-        opacity: active ? 1 : 0.86,
+        background: active ? "rgba(255,255,255,0.12)" : "transparent",
+        opacity: active ? 1 : 0.82,
       }}
     >
       {children}
@@ -55,10 +56,12 @@ export default function App() {
   const nav = useNavigate();
   const { isAuthed, setIsAuthed } = useAuth();
 
-  // Search (global)
-  const [searchQuery, setSearchQuery] = useState("");
+  // ✅ Preview vs Full mode
+  // Shop + Product = preview capped
+  // Account = full (no cap)
+  const paidMode = loc.pathname.startsWith("/account");
 
-  // Backend ping
+  // Phase 0 ping
   const [backendStatus, setBackendStatus] = useState("checking");
   useEffect(() => {
     const base = import.meta.env.VITE_ALBUM_BACKEND_URL;
@@ -71,7 +74,7 @@ export default function App() {
       .catch(() => setBackendStatus("fail"));
   }, []);
 
-  // Global player state
+  // Global player state (single source of truth)
   const [activeProductId, setActiveProductId] = useState("album-001");
   const product = useMemo(() => getProduct(activeProductId), [activeProductId]);
 
@@ -82,15 +85,17 @@ export default function App() {
     [tracks, activeTrackId]
   );
 
+  // keep activeTrackId valid when product changes
   useEffect(() => {
     if (!tracks.length) return;
     if (!tracks.some((t) => t.id === activeTrackId)) {
       setActiveTrackId(tracks[0].id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProductId]);
+  }, [activeProductId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState(false);
 
   const onPrev = () => {
     if (!tracks.length) return;
@@ -102,6 +107,15 @@ export default function App() {
 
   const onNext = () => {
     if (!tracks.length) return;
+
+    if (shuffle) {
+      const other = tracks.filter((t) => t.id !== activeTrackId);
+      const pick = other[Math.floor(Math.random() * other.length)] || tracks[0];
+      setActiveTrackId(pick.id);
+      setIsPlaying(true);
+      return;
+    }
+
     const idx = tracks.findIndex((t) => t.id === activeTrackId);
     const nextIdx = idx >= tracks.length - 1 ? 0 : idx + 1;
     setActiveTrackId(tracks[nextIdx].id);
@@ -113,79 +127,96 @@ export default function App() {
     nav(`/sold?productId=${encodeURIComponent(productId)}`);
   };
 
+  // ✅ Account -> App play command bridge
+  useEffect(() => {
+    const handler = (e) => {
+      const d = e?.detail || {};
+      if (d.productId) setActiveProductId(String(d.productId));
+      if (d.trackId) setActiveTrackId(String(d.trackId));
+      setIsPlaying(true);
+    };
+    window.addEventListener("blackout:play", handler);
+    return () => window.removeEventListener("blackout:play", handler);
+  }, []);
+
   return (
-    <div style={page}>
-      <div style={bgOverlay} />
-
-      <div style={{ position: "relative" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 110px" }}>
-          {/* Top bar */}
-          <div style={topBar}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flexWrap: "wrap" }}>
-              <div style={brand}>Block Radius</div>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <TopNavLink to="/">Home</TopNavLink>
-                <TopNavLink to="/shop">Shop</TopNavLink>
-                <TopNavLink to="/account">Account</TopNavLink>
-              </div>
-
-              <div style={backendPill}>
-                Backend:{" "}
-                {backendStatus === "checking" && "…"}
-                {backendStatus === "ok" && "OK"}
-                {backendStatus === "fail" && "FAIL"}
-                {backendStatus === "missing" && "MISSING ENV"}
-              </div>
+    <div style={{ minHeight: "100vh", background: "radial-gradient(circle at 30% 20%, #0b1633 0%, #060a16 55%, #04060c 100%)" }}>
+      {/* pad bottom so content doesn't hide behind player */}
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 130px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 900, letterSpacing: 0.3 }}>
+              Block Radius
             </div>
-
-            <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
-              {!isAuthed ? (
-                <button
-                  onClick={() => nav(`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`)}
-                  style={topBtn}
-                >
-                  Login
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    localStorage.removeItem("authToken");
-                    setIsAuthed(false);
-                    nav("/shop");
-                  }}
-                  style={topBtn}
-                >
-                  Logout
-                </button>
-              )}
-
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search"
-                style={searchInput}
-              />
+            <div
+              style={{
+                fontFamily: "system-ui",
+                fontSize: 12,
+                fontWeight: 900,
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "rgba(255,255,255,0.06)",
+                color: "white",
+                opacity: 0.9,
+              }}
+            >
+              Backend:{" "}
+              {backendStatus === "checking" && "…"}
+              {backendStatus === "ok" && "OK"}
+              {backendStatus === "fail" && "FAIL"}
+              {backendStatus === "missing" && "MISSING ENV"}
             </div>
           </div>
 
-          {/* Main */}
-          <div style={{ marginTop: 16 }}>
+          {!isAuthed ? (
+            <button
+              onClick={() => nav(`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`)}
+              style={topBtn}
+            >
+              Login
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                localStorage.removeItem("authToken");
+                setIsAuthed(false);
+                nav("/shop");
+              }}
+              style={topBtn}
+            >
+              Logout
+            </button>
+          )}
+        </div>
+
+        {/* Main */}
+        <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
+          <div style={sideNav}>
+            <div style={navHeader}>Public</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <NavLink to="/shop">Shop</NavLink>
+            </div>
+
+            <div style={{ height: 14 }} />
+
+            <div style={navHeader}>Internal</div>
+            {!isAuthed ? (
+              <div style={{ color: "white", opacity: 0.65, fontFamily: "system-ui", fontSize: 12, lineHeight: 1.4 }}>
+                Login to access internal pages.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                <NavLink to="/account">Account</NavLink>
+              </div>
+            )}
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
             <Routes>
-              <Route
-                path="/"
-                element={
-                  <div style={pageCard}>
-                    <h1 style={{ marginTop: 0, marginBottom: 8, fontFamily: "system-ui", color: "white" }}>Home</h1>
-                    <div style={{ color: "white", opacity: 0.78, fontFamily: "system-ui" }}>
-                      Phase 1 placeholder.
-                    </div>
-                  </div>
-                }
-              />
-
+              <Route path="/" element={<Navigate to="/shop" replace />} />
               <Route path="/shop" element={<Shop />} />
-
               <Route
                 path="/shop/:productId"
                 element={
@@ -199,7 +230,6 @@ export default function App() {
                   />
                 }
               />
-
               <Route path="/sold" element={<Sold />} />
               <Route path="/login" element={<Login />} />
 
@@ -216,97 +246,50 @@ export default function App() {
             </Routes>
           </div>
         </div>
-
-        <BottomPlayer
-          track={activeTrack}
-          isPlaying={isPlaying}
-          onPlayPause={(next) => setIsPlaying(Boolean(next))}
-          onPrev={onPrev}
-          onNext={onNext}
-          previewSeconds={30}
-        />
       </div>
+
+      {/* Global Bottom Freeze Player */}
+      <BottomPlayer
+        track={activeTrack}
+        isPlaying={isPlaying}
+        onPlayPause={(next) => setIsPlaying(Boolean(next))}
+        onPrev={onPrev}
+        onNext={onNext}
+        shuffle={shuffle}
+        onToggleShuffle={() => setShuffle((v) => !v)}
+        repeat={repeat}
+        onToggleRepeat={() => setRepeat((v) => !v)}
+        previewSeconds={30}
+        paid={paidMode} // ✅ account full, shop preview
+      />
     </div>
   );
 }
 
-const page = {
-  minHeight: "100vh",
-  background: "#0b0d10",
-  position: "relative",
-};
-
-const bgOverlay = {
-  position: "absolute",
-  inset: 0,
-  pointerEvents: "none",
-  background:
-    "radial-gradient(1200px 700px at 18% 10%, rgba(90,120,255,0.12), transparent 60%), radial-gradient(900px 600px at 85% 35%, rgba(40,220,150,0.08), transparent 55%), radial-gradient(900px 700px at 45% 95%, rgba(210,80,255,0.07), transparent 60%)",
-  opacity: 1,
-};
-
-const topBar = {
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  gap: 16,
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 16,
-  padding: 14,
-  background: "rgba(255,255,255,0.04)",
-};
-
-const brand = {
-  color: "white",
-  fontFamily: "system-ui",
-  fontWeight: 950,
-  letterSpacing: 0.2,
-  marginRight: 8,
-  whiteSpace: "nowrap",
-};
-
-const backendPill = {
-  fontFamily: "system-ui",
-  fontSize: 12,
-  fontWeight: 900,
-  padding: "6px 10px",
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "white",
-  opacity: 0.95,
-  whiteSpace: "nowrap",
-  alignSelf: "center",
-};
-
 const topBtn = {
-  width: 140,
-  padding: "10px 14px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.06)",
+  cursor: "pointer",
   color: "white",
   fontWeight: 900,
-  cursor: "pointer",
-  fontFamily: "system-ui",
-};
-
-const searchInput = {
-  width: 420,
-  height: 44,
-  padding: "0 14px",
-  borderRadius: 12,
+  padding: "10px 14px",
+  borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
-  color: "white",
-  fontWeight: 800,
-  outline: "none",
-  fontFamily: "system-ui",
 };
 
-const pageCard = {
+const sideNav = {
+  width: 220,
+  flexShrink: 0,
   border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 16,
-  padding: 16,
+  borderRadius: 14,
+  padding: 12,
+  height: "fit-content",
   background: "rgba(255,255,255,0.04)",
+};
+
+const navHeader = {
+  color: "white",
+  fontFamily: "system-ui",
+  fontWeight: 900,
+  opacity: 0.85,
+  marginBottom: 10,
 };
