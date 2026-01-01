@@ -4,6 +4,7 @@ import Shop from "./pages/Shop.jsx";
 import Product from "./pages/Product.jsx";
 import Sold from "./pages/Sold.jsx";
 import Login from "./pages/Login.jsx";
+import MyAccount from "./pages/MyAccount.jsx";
 import BottomPlayer from "./components/BottomPlayer.jsx";
 import { getProduct } from "./data/catalog.js";
 
@@ -54,7 +55,7 @@ export default function App() {
   const nav = useNavigate();
   const { isAuthed, setIsAuthed } = useAuth();
 
-  // Search (global, same size/location)
+  // Search (global)
   const [searchQuery, setSearchQuery] = useState("");
 
   // Backend ping
@@ -114,17 +115,16 @@ export default function App() {
 
   return (
     <div style={page}>
-      {/* subtle gradient filter overlay */}
       <div style={bgOverlay} />
 
       <div style={{ position: "relative" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 110px" }}>
           {/* Top bar */}
           <div style={topBar}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flexWrap: "wrap" }}>
               <div style={brand}>Block Radius</div>
 
-              <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <TopNavLink to="/">Home</TopNavLink>
                 <TopNavLink to="/shop">Shop</TopNavLink>
                 <TopNavLink to="/account">Account</TopNavLink>
@@ -207,14 +207,7 @@ export default function App() {
                 path="/account"
                 element={
                   <RequireAuth>
-                    <div style={pageCard}>
-                      <h1 style={{ marginTop: 0, marginBottom: 8, fontFamily: "system-ui", color: "white" }}>
-                        Account
-                      </h1>
-                      <div style={{ color: "white", opacity: 0.78, fontFamily: "system-ui" }}>
-                        Phase 1 placeholder.
-                      </div>
-                    </div>
+                    <MyAccount />
                   </RequireAuth>
                 }
               />
@@ -239,7 +232,7 @@ export default function App() {
 
 const page = {
   minHeight: "100vh",
-  background: "#0b0d10", // darker grey base
+  background: "#0b0d10",
   position: "relative",
 };
 
@@ -249,7 +242,6 @@ const bgOverlay = {
   pointerEvents: "none",
   background:
     "radial-gradient(1200px 700px at 18% 10%, rgba(90,120,255,0.12), transparent 60%), radial-gradient(900px 600px at 85% 35%, rgba(40,220,150,0.08), transparent 55%), radial-gradient(900px 700px at 45% 95%, rgba(210,80,255,0.07), transparent 60%)",
-  filter: "blur(0px)",
   opacity: 1,
 };
 
