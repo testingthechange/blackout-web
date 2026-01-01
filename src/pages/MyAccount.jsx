@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+// src/pages/MyAccount.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getProduct } from "../data/catalog.js";
 
 const PURCHASES_KEY = "blackout:purchases";
@@ -65,6 +66,62 @@ export default function MyAccount() {
     );
   };
 
+  // ---------- Mini Nav (Account page only) ----------
+  const [openTab, setOpenTab] = useState(null); // "collection" | "playlist" | "swag" | "other" | null
+  const [menuPos, setMenuPos] = useState({ left: 0, top: 0, width: 240 });
+  const miniNavCardRef = useRef(null);
+  const tabRefs = useRef({}); // { key: HTMLButtonElement }
+
+  const toggleTab = (key) => {
+    if (openTab === key) {
+      setOpenTab(null);
+      return;
+    }
+
+    // position dropdown under clicked tab
+    const card = miniNavCardRef.current;
+    const btn = tabRefs.current[key];
+    if (card && btn) {
+      const cardRect = card.getBoundingClientRect();
+      const btnRect = btn.getBoundingClientRect();
+
+      const left = Math.max(12, Math.min(btnRect.left - cardRect.left, cardRect.width - 260));
+      const top = btnRect.bottom - cardRect.top + 10;
+
+      setMenuPos({
+        left,
+        top,
+        width: 260,
+      });
+    }
+    setOpenTab(key);
+  };
+
+  // close on outside click / esc
+  useEffect(() => {
+    if (!openTab) return;
+
+    const onDown = (e) => {
+      const card = miniNavCardRef.current;
+      if (!card) return;
+      if (!card.contains(e.target)) setOpenTab(null);
+    };
+
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpenTab(null);
+    };
+
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openTab]);
+
+  const tabLabel = (k) =>
+    k === "collection" ? "My Collection" : k === "playlist" ? "Playlist" : k === "swag" ? "Swag" : "Other";
+
   return (
     <div style={{ color: "white", fontFamily: "system-ui" }}>
       <h1 style={{ marginTop: 0, marginBottom: 8 }}>Account</h1>
@@ -91,6 +148,7 @@ export default function MyAccount() {
                     background: isActive ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
                     opacity: isActive ? 1 : 0.9,
                   }}
+                  title={`${a.albumName} — ${a.artist}`}
                 >
                   <img
                     src={a.coverUrl}
@@ -154,6 +212,7 @@ export default function MyAccount() {
 
           {/* Right cards */}
           <div style={{ display: "grid", gap: 16 }}>
+            {/* Album info */}
             <div style={card}>
               <div style={{ fontWeight: 1000, fontSize: 18 }}>{activeAlbum?.albumName || "—"}</div>
               <div style={{ opacity: 0.85, marginTop: 4 }}>{activeAlbum?.artist || ""}</div>
@@ -162,6 +221,68 @@ export default function MyAccount() {
               </div>
             </div>
 
+            {/* ✅ Mini Nav Card (page-only) */}
+            <div ref={miniNavCardRef} style={{ ...card, position: "relative" }}>
+              <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>Mini Nav</div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {["collection", "playlist", "swag", "other"].map((k) => {
+                  const active = openTab === k;
+                  return (
+                    <button
+                      key={k}
+                      ref={(el) => (tabRefs.current[k] = el)}
+                      onClick={() => toggleTab(k)}
+                      style={{
+                        ...pillBtn,
+                        background: active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)",
+                        opacity: active ? 1 : 0.9,
+                      }}
+                    >
+                      {tabLabel(k)}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {openTab ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: menuPos.left,
+                    top: menuPos.top,
+                    width: menuPos.width,
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.16)",
+                    background: "rgba(10,12,16,0.96)",
+                    boxShadow: "0 18px 45px rgba(0,0,0,0.45)",
+                    padding: 10,
+                    zIndex: 50,
+                    backdropFilter: "blur(10px)",
+                  }}
+                >
+                  <div style={{ fontWeight: 1000, marginBottom: 8 }}>{tabLabel(openTab)}</div>
+
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <button style={menuItem} onClick={() => window.alert(`${tabLabel(openTab)}: coming soon`)}>
+                      Open
+                    </button>
+                    <button style={menuItem} onClick={() => window.alert("Placeholder action")}>
+                      Manage
+                    </button>
+                    <button style={menuItem} onClick={() => setOpenTab(null)}>
+                      Close
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
+                    Click outside or press Esc to close.
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Tracks */}
             <div style={card}>
               <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>Album Tracks</div>
 
@@ -244,4 +365,27 @@ const trackRow = {
   background: "rgba(255,255,255,0.05)",
   color: "white",
   fontFamily: "system-ui",
+};
+
+const pillBtn = {
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 950,
+  padding: "8px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+};
+
+const menuItem = {
+  cursor: "pointer",
+  textAlign: "left",
+  width: "100%",
+  padding: "10px 10px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  fontWeight: 900,
 };
