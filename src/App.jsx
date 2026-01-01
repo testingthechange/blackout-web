@@ -1,14 +1,18 @@
-import { Routes, Route, Navigate, Link, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+// src/App.jsx
+import { Routes, Route, Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 
+import Home from "./pages/Home.jsx";
 import Shop from "./pages/Shop.jsx";
 import Product from "./pages/Product.jsx";
+import MyAccount from "./pages/MyAccount.jsx";
 import Sold from "./pages/Sold.jsx";
 import Login from "./pages/Login.jsx";
-import MyAccount from "./pages/MyAccount.jsx";
 
 import BottomPlayer from "./components/BottomPlayer.jsx";
-import { getProduct } from "./data/catalog.js";
+
+// IMPORTANT: keep this env name consistent with your Render env var
+const BACKEND_ENV_KEY = "VITE_ALBUM_BACKEND_URL";
 
 function useAuth() {
   const [isAuthed, setIsAuthed] = useState(Boolean(localStorage.getItem("authToken")));
@@ -20,149 +24,59 @@ function useAuth() {
   return { isAuthed, setIsAuthed };
 }
 
-function RequireAuth({ children }) {
-  const { isAuthed } = useAuth();
-  const loc = useLocation();
-  if (!isAuthed) {
-    return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />;
-  }
-  return children;
-}
-
-function TopNav() {
-  const loc = useLocation();
-
-  const item = (to, label) => {
-    const active = loc.pathname === to || (to === "/shop" && loc.pathname.startsWith("/shop"));
-    return (
-      <Link
-        to={to}
-        style={{
-          textDecoration: "none",
-          color: "white",
-          fontFamily: "system-ui",
-          fontWeight: 950,
-          fontSize: 12,
-          padding: "8px 10px",
-          borderRadius: 999,
-          border: "1px solid rgba(255,255,255,0.14)",
-          background: active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)",
-          opacity: active ? 1 : 0.88,
-        }}
-      >
-        {label}
-      </Link>
-    );
-  };
-
-  return (
-    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-      {item("/", "Home")}
-      {item("/shop", "Shop")}
-      {item("/account", "Account")}
-    </div>
-  );
-}
-
 export default function App() {
   const loc = useLocation();
-  const nav = useNavigate();
   const { isAuthed, setIsAuthed } = useAuth();
 
-  // ✅ Player behavior is page-based:
-  // - Shop/Product = preview mode (30s)
-  // - Account = full mode
-  const playerMode = loc.pathname.startsWith("/account") ? "full" : "preview";
-
-  // Global search UI (same on all pages). Not wired to filtering yet.
-  const [globalSearch, setGlobalSearch] = useState("");
-
-  // Phase 0 ping
+  // Global backend ping (header badge)
   const [backendStatus, setBackendStatus] = useState("checking");
   useEffect(() => {
-    const base = import.meta.env.VITE_ALBUM_BACKEND_URL;
-    if (!base) return setBackendStatus("missing");
-    fetch(`${base}/api/health`)
+    const base = import.meta.env[BACKEND_ENV_KEY];
+    if (!base) {
+      setBackendStatus("missing");
+      return;
+    }
+    fetch(`${String(base).replace(/\/+$/, "")}/api/health`)
       .then((res) => setBackendStatus(res.ok ? "ok" : "fail"))
       .catch(() => setBackendStatus("fail"));
   }, []);
 
-  // Global player state (single source of truth)
-  const [activeProductId, setActiveProductId] = useState("album-001");
-  const product = useMemo(() => getProduct(activeProductId), [activeProductId]);
+  // Global shell search (under login area) - keeps stable, doesn’t vanish
+  const [q, setQ] = useState("");
 
-  const tracks = product?.tracks || [];
-  const [activeTrackId, setActiveTrackId] = useState(tracks[0]?.id || null);
-  const activeTrack = useMemo(
-    () => tracks.find((t) => t.id === activeTrackId) || tracks[0] || null,
-    [tracks, activeTrackId]
-  );
-
-  // keep activeTrackId valid when product changes
-  useEffect(() => {
-    if (!tracks.length) return;
-    if (!tracks.some((t) => t.id === activeTrackId)) setActiveTrackId(tracks[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProductId]);
-
+  // ----- PLAYER STATE (page-scoped behavior, shared UI) -----
+  // Shop uses preview mode, Account uses full mode. Same visual location.
+  const [playerMode, setPlayerMode] = useState("preview"); // "preview" | "full"
+  const [activeTrack, setActiveTrack] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [shuffle, setShuffle] = useState(false);
-  const [repeat, setRepeat] = useState(false);
 
-  const onPrev = () => {
-    if (!tracks.length) return;
-    const idx = tracks.findIndex((t) => t.id === activeTrackId);
-    const prevIdx = idx <= 0 ? tracks.length - 1 : idx - 1;
-    setActiveTrackId(tracks[prevIdx].id);
+  const onPickTrackPreview = (track) => {
+    setPlayerMode("preview");
+    setActiveTrack(track);
     setIsPlaying(true);
   };
 
-  const onNext = () => {
-    if (!tracks.length) return;
-
-    if (shuffle) {
-      const other = tracks.filter((t) => t.id !== activeTrackId);
-      const pick = other[Math.floor(Math.random() * other.length)] || tracks[0];
-      setActiveTrackId(pick.id);
-      setIsPlaying(true);
-      return;
-    }
-
-    const idx = tracks.findIndex((t) => t.id === activeTrackId);
-    const nextIdx = idx >= tracks.length - 1 ? 0 : idx + 1;
-    setActiveTrackId(tracks[nextIdx].id);
+  const onPickTrackFull = (track) => {
+    setPlayerMode("full");
+    setActiveTrack(track);
     setIsPlaying(true);
   };
 
-  const onBuy = (productId) => {
-    setActiveProductId(productId);
-    nav(`/sold?productId=${encodeURIComponent(productId)}`);
-  };
+  // Player visible only on these routes (NOT on Home)
+  const playerVisible =
+    loc.pathname.startsWith("/shop") ||
+    loc.pathname.startsWith("/account") ||
+    loc.pathname.startsWith("/sold");
 
-  // ✅ Account -> App play bridge
-  useEffect(() => {
-    const handler = (e) => {
-      const d = e?.detail || {};
-      if (d.productId) setActiveProductId(String(d.productId));
-      if (d.trackId) setActiveTrackId(String(d.trackId));
-      setIsPlaying(true);
-    };
-    window.addEventListener("blackout:play", handler);
-    return () => window.removeEventListener("blackout:play", handler);
-  }, []);
+  const isHome = loc.pathname === "/";
 
   return (
-    <div style={bg}>
-      {/* pad bottom so content doesn't hide behind player */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "16px 16px 140px" }}>
-        {/* Header row */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 1000, letterSpacing: 0.2 }}>
-              Block Radius
-            </div>
-
-            <TopNav />
+    <div style={appBg}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "14px 18px 110px" }}>
+        {/* Top Row */}
+        <div style={topRow}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={brand}>Block Radius</div>
 
             <div style={badge}>
               Backend:{" "}
@@ -173,109 +87,98 @@ export default function App() {
             </div>
           </div>
 
-          {!isAuthed ? (
-            <button
-              onClick={() => nav(`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`)}
-              style={topBtn}
-            >
-              Login
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                localStorage.removeItem("authToken");
-                setIsAuthed(false);
-                nav("/shop");
-              }}
-              style={topBtn}
-            >
-              Logout
-            </button>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {!isAuthed ? (
+              <Link to="/login" style={topBtnLink}>
+                Login
+              </Link>
+            ) : (
+              <button
+                onClick={() => {
+                  localStorage.removeItem("authToken");
+                  setIsAuthed(false);
+                }}
+                style={topBtn}
+              >
+                Logout
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Global search (under login area, same everywhere) */}
-        <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
-          <input
-            value={globalSearch}
-            onChange={(e) => setGlobalSearch(e.target.value)}
-            placeholder="Search"
-            style={globalSearchInput}
-          />
+        {/* Small global nav */}
+        <div style={navRow}>
+          <Link to="/" style={navLink(isHome)}>
+            Home
+          </Link>
+          <Link to="/shop" style={navLink(loc.pathname.startsWith("/shop"))}>
+            Shop
+          </Link>
+          <Link to="/account" style={navLink(loc.pathname.startsWith("/account"))}>
+            Account
+          </Link>
         </div>
 
-        {/* Main content */}
-        <div style={{ marginTop: 14 }}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/shop" replace />} />
-            <Route path="/shop" element={<Shop />} />
-            <Route
-              path="/shop/:productId"
-              element={
-                <Product
-                  activeTrackId={activeTrackId}
-                  setActiveTrackId={(id) => {
-                    setActiveTrackId(id);
-                    setIsPlaying(true);
-                  }}
-                  onBuy={onBuy}
-                />
-              }
-            />
-            <Route path="/sold" element={<Sold />} />
-            <Route path="/login" element={<Login />} />
-
-            <Route
-              path="/account"
-              element={
-                <RequireAuth>
-                  <MyAccount />
-                </RequireAuth>
-              }
-            />
-
-            <Route path="*" element={<Navigate to="/shop" replace />} />
-          </Routes>
+        {/* Global search (under login area) */}
+        <div style={{ marginTop: 10, marginBottom: 16 }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" style={search} />
         </div>
+
+        {/* Routes */}
+        <Routes>
+          {/* ✅ Home is primary: NO redirect */}
+          <Route path="/" element={<Home />} />
+
+          <Route path="/shop" element={<Shop q={q} onPickTrack={onPickTrackPreview} />} />
+          <Route path="/shop/:productId" element={<Product q={q} onPickTrack={onPickTrackPreview} />} />
+
+          <Route path="/sold" element={<Sold />} />
+          <Route path="/login" element={<Login />} />
+
+          <Route path="/account" element={<MyAccount q={q} onPickTrack={onPickTrackFull} />} />
+
+          {/* fallback */}
+          <Route path="*" element={<Home />} />
+        </Routes>
       </div>
 
-      {/* Bottom Freeze Player (UI same, behavior by page mode) */}
-      <BottomPlayer
-        track={activeTrack}
-        isPlaying={isPlaying}
-        onPlayPause={(next) => setIsPlaying(Boolean(next))}
-        onPrev={onPrev}
-        onNext={onNext}
-        shuffle={shuffle}
-        onToggleShuffle={() => setShuffle((v) => !v)}
-        repeat={repeat}
-        onToggleRepeat={() => setRepeat((v) => !v)}
-        mode={playerMode}     // ✅ "preview" on shop, "full" on account
-        previewSeconds={30}
-      />
+      {/* ✅ Player NOT shown on Home */}
+      {playerVisible ? (
+        <BottomPlayer
+          mode={playerMode}
+          track={activeTrack}
+          isPlaying={isPlaying}
+          onPlayPause={(next) => setIsPlaying(Boolean(next))}
+        />
+      ) : null}
     </div>
   );
 }
 
-const bg = {
+const appBg = {
   minHeight: "100vh",
-  background: "radial-gradient(circle at 30% 20%, rgba(12,22,40,1) 0%, rgba(8,10,16,1) 55%, rgba(6,7,10,1) 100%)",
+  background:
+    "radial-gradient(circle at 25% 20%, rgba(40,60,90,0.45) 0%, rgba(10,12,16,1) 52%, rgba(6,7,9,1) 100%)",
 };
 
-const topBtn = {
-  cursor: "pointer",
+const topRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+};
+
+const brand = {
   color: "white",
-  fontWeight: 950,
-  padding: "9px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.06)",
+  fontFamily: "system-ui",
+  fontWeight: 1000,
+  letterSpacing: 0.4,
 };
 
 const badge = {
   fontFamily: "system-ui",
   fontSize: 12,
-  fontWeight: 950,
+  fontWeight: 900,
   padding: "6px 10px",
   borderRadius: 999,
   border: "1px solid rgba(255,255,255,0.14)",
@@ -284,14 +187,48 @@ const badge = {
   opacity: 0.9,
 };
 
-const globalSearchInput = {
-  width: "320px",
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "rgba(0,0,0,0.25)",
+const topBtn = {
+  cursor: "pointer",
   color: "white",
-  outline: "none",
-  fontSize: 13,
   fontWeight: 900,
+  padding: "9px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.06)",
+};
+
+const topBtnLink = { ...topBtn, textDecoration: "none", display: "inline-block" };
+
+const navRow = {
+  marginTop: 10,
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+};
+
+const navLink = (active) => ({
+  textDecoration: "none",
+  color: "white",
+  fontFamily: "system-ui",
+  fontWeight: 900,
+  fontSize: 12,
+  padding: "8px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)",
+  opacity: active ? 1 : 0.9,
+});
+
+const search = {
+  width: "60%",
+  maxWidth: 520,
+  height: 44,
+  padding: "0 14px",
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(20,20,20,0.55)",
+  color: "white",
+  fontFamily: "system-ui",
+  fontWeight: 800,
+  outline: "none",
 };
