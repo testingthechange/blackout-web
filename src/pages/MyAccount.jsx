@@ -1,6 +1,4 @@
-// src/pages/MyAccount.jsx
 import React, { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { getProduct } from "../data/catalog.js";
 
 const PURCHASES_KEY = "blackout:purchases";
@@ -22,8 +20,6 @@ function loadPurchases() {
 }
 
 export default function MyAccount() {
-  const nav = useNavigate();
-
   const [q, setQ] = useState("");
   const [mode, setMode] = useState(() => localStorage.getItem(MODE_KEY) || "album");
 
@@ -56,17 +52,33 @@ export default function MyAccount() {
     return saved || first || "album-001";
   });
 
-  const activeAlbum = useMemo(() => getProduct(activeProductId) || albums[0] || null, [activeProductId, albums]);
+  const activeAlbum = useMemo(
+    () => getProduct(activeProductId) || albums[0] || null,
+    [activeProductId, albums]
+  );
+
   const tracks = activeAlbum?.tracks || [];
 
   const setModeAndPersist = (next) => {
     setMode(next);
     localStorage.setItem(MODE_KEY, next);
+    // (Mode -> player wiring is next; for now we persist only)
   };
 
   const pickAlbum = (id) => {
     setActiveProductId(id);
     localStorage.setItem(ACTIVE_KEY, id);
+  };
+
+  const playTrackNow = (trackId) => {
+    if (!activeAlbum?.id || !trackId) return;
+
+    // ✅ Direct command to App.jsx (global bottom player)
+    window.dispatchEvent(
+      new CustomEvent("blackout:play", {
+        detail: { productId: activeAlbum.id, trackId },
+      })
+    );
   };
 
   return (
@@ -76,7 +88,7 @@ export default function MyAccount() {
         <div style={{ fontSize: 12, opacity: 0.75 }}>My Collection</div>
       </div>
 
-      {/* Search (same spot every time: top of content) */}
+      {/* Search */}
       <div style={{ marginTop: 10 }}>
         <input
           value={q}
@@ -86,7 +98,7 @@ export default function MyAccount() {
         />
       </div>
 
-      {/* Thumbnails row */}
+      {/* Thumbnails */}
       <div style={{ marginTop: 14, ...card }}>
         <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>My Collection</div>
 
@@ -121,10 +133,29 @@ export default function MyAccount() {
                       border: "1px solid rgba(255,255,255,0.12)",
                     }}
                   />
-                  <div style={{ marginTop: 8, fontWeight: 950, fontSize: 12, maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontWeight: 950,
+                      fontSize: 12,
+                      maxWidth: 110,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {a.albumName}
                   </div>
-                  <div style={{ opacity: 0.7, fontSize: 12, maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div
+                    style={{
+                      opacity: 0.7,
+                      fontSize: 12,
+                      maxWidth: 110,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {a.artist}
                   </div>
                 </button>
@@ -134,7 +165,7 @@ export default function MyAccount() {
         )}
       </div>
 
-      {/* Mode card under thumbnails (per your spec) */}
+      {/* Mode card */}
       <div style={{ marginTop: 14, ...card }}>
         <div style={{ fontWeight: 950, fontSize: 14, opacity: 0.92, marginBottom: 10 }}>Mode</div>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -144,7 +175,12 @@ export default function MyAccount() {
           </label>
 
           <label style={radioRow}>
-            <input type="radio" name="mode" checked={mode === "smartbridge"} onChange={() => setModeAndPersist("smartbridge")} />
+            <input
+              type="radio"
+              name="mode"
+              checked={mode === "smartbridge"}
+              onChange={() => setModeAndPersist("smartbridge")}
+            />
             <span>Smart Bridge</span>
           </label>
 
@@ -154,10 +190,10 @@ export default function MyAccount() {
         </div>
       </div>
 
-      {/* Main two-column layout */}
+      {/* Two-column */}
       <div style={{ marginTop: 14, ...pageCard }}>
         <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16 }}>
-          {/* Left: big art cover */}
+          {/* Left: big art */}
           <div style={card}>
             <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.9 }}>Cover</div>
             {activeAlbum ? (
@@ -173,17 +209,11 @@ export default function MyAccount() {
             ) : (
               <div style={{ opacity: 0.75 }}>No active album selected.</div>
             )}
-
-            <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={() => activeAlbum && nav(`/shop/${encodeURIComponent(activeAlbum.id)}`)} style={ghostBtn} disabled={!activeAlbum}>
-                View Product
-              </button>
-            </div>
           </div>
 
-          {/* Right: thin column, 3 cards */}
+          {/* Right: 3 cards */}
           <div style={{ display: "grid", gap: 16 }}>
-            {/* Album info like Shop */}
+            {/* Album info */}
             <div style={card}>
               <div style={{ fontWeight: 1000, fontSize: 18 }}>{activeAlbum?.albumName || "—"}</div>
               <div style={{ opacity: 0.85, marginTop: 4 }}>{activeAlbum?.artist || ""}</div>
@@ -192,7 +222,7 @@ export default function MyAccount() {
               </div>
             </div>
 
-            {/* Mini nav (top of card, not side) */}
+            {/* Mini nav placeholders */}
             <div style={card}>
               <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>Navigation</div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -203,7 +233,7 @@ export default function MyAccount() {
               </div>
             </div>
 
-            {/* Tracks card */}
+            {/* Tracks (click = play now) */}
             <div style={card}>
               <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>Album Tracks</div>
 
@@ -215,21 +245,17 @@ export default function MyAccount() {
                     <button
                       key={t.id || idx}
                       style={trackRow}
-                      onClick={() => {
-                        // For now, go to the product page where track clicks already sync to the bottom player.
-                        if (activeAlbum?.id) nav(`/shop/${encodeURIComponent(activeAlbum.id)}`);
-                      }}
-                      title="Track selection sync wiring continues on Product page"
+                      onClick={() => playTrackNow(t.id)}
+                      title="Play"
                     >
                       <span style={{ fontWeight: 950 }}>{t.title}</span>
-                      <span style={{ opacity: 0.7, fontSize: 12 }}>preview</span>
                     </button>
                   ))}
                 </div>
               )}
 
               <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-                Track click routes to Product (sync lives there right now).
+                Click a track to play (full length).
               </div>
             </div>
           </div>
@@ -307,16 +333,6 @@ const pillMuted = {
   ...pill,
   opacity: 0.75,
   background: "rgba(255,255,255,0.05)",
-};
-
-const ghostBtn = {
-  cursor: "pointer",
-  color: "white",
-  fontWeight: 950,
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.06)",
 };
 
 const trackRow = {
