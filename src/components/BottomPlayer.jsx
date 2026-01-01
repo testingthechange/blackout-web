@@ -6,21 +6,19 @@ export default function BottomPlayer({
   onPlayPause,
   onPrev,
   onNext,
-  shuffle,
-  onToggleShuffle,
-  repeat,
-  onToggleRepeat,
   previewSeconds = 30,
 }) {
   const audioRef = useRef(null);
   const [error, setError] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(previewSeconds);
 
-  const trackLabel = useMemo(() => (track ? track.title || "Untitled" : "No track selected"), [track]);
+  const title = useMemo(() => (track ? track.title || "Untitled" : "No track selected"), [track]);
 
+  // Load audio when track changes
   useEffect(() => {
     setError("");
     setSecondsLeft(previewSeconds);
+
     const el = audioRef.current;
     if (!el) return;
 
@@ -36,17 +34,25 @@ export default function BottomPlayer({
     el.currentTime = 0;
     el.load();
 
-    if (isPlaying) el.play().catch((e) => setError(e?.message || "Audio play failed"));
+    if (isPlaying) {
+      el.play().catch((e) => setError(e?.message || "Audio play failed"));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track?.previewUrl]);
 
+  // React to play/pause state
   useEffect(() => {
     const el = audioRef.current;
     if (!el || !track?.previewUrl) return;
-    if (isPlaying) el.play().catch((e) => setError(e?.message || "Audio play failed"));
-    else el.pause();
+
+    if (isPlaying) {
+      el.play().catch((e) => setError(e?.message || "Audio play failed"));
+    } else {
+      el.pause();
+    }
   }, [isPlaying, track?.previewUrl]);
 
+  // 30s preview cap
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -64,11 +70,6 @@ export default function BottomPlayer({
     };
 
     const onEnded = () => {
-      if (repeat && track?.previewUrl) {
-        el.currentTime = 0;
-        el.play().catch(() => {});
-        return;
-      }
       onNext();
     };
 
@@ -78,34 +79,44 @@ export default function BottomPlayer({
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("ended", onEnded);
     };
-  }, [previewSeconds, onNext, onPlayPause, repeat, track?.previewUrl]);
+  }, [previewSeconds, onNext, onPlayPause]);
+
+  const playDisabled = !track?.previewUrl;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        padding: "12px 14px",
-        borderTop: "1px solid rgba(255,255,255,0.12)",
-        background: "rgba(0,0,0,0.55)",
-        backdropFilter: "blur(10px)",
-      }}
-    >
-      <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", gap: 12 }}>
-        <button onClick={() => onPlayPause(!isPlaying)} style={btn}>{isPlaying ? "Pause" : "Play"}</button>
-        <button onClick={onToggleShuffle} style={{ ...btn, opacity: shuffle ? 1 : 0.7 }}>Shuffle</button>
-        <button onClick={onToggleRepeat} style={{ ...btn, opacity: repeat ? 1 : 0.7 }}>Repeat</button>
-        <button onClick={onPrev} style={btn}>Prev</button>
-        <button onClick={onNext} style={btn}>Next</button>
+    <div style={wrap}>
+      <div style={inner}>
+        {/* LEFT controls */}
+        <div style={leftControls}>
+          <button onClick={onPrev} style={iconBtn} aria-label="Previous">
+            ‹‹
+          </button>
 
-        <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 900, marginLeft: 8, flex: 1, minWidth: 0 }}>
-          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{trackLabel}</div>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>
-            Preview: {secondsLeft}s left{error ? <span style={{ marginLeft: 10, color: "#ffb3b3" }}>({error})</span> : null}
+          <button
+            onClick={() => onPlayPause(!isPlaying)}
+            style={{ ...playBtn, opacity: playDisabled ? 0.5 : 1, cursor: playDisabled ? "not-allowed" : "pointer" }}
+            aria-label={isPlaying ? "Pause" : "Play"}
+            disabled={playDisabled}
+          >
+            {isPlaying ? "❚❚" : "▶"}
+          </button>
+
+          <button onClick={onNext} style={iconBtn} aria-label="Next">
+            ››
+          </button>
+        </div>
+
+        {/* CENTER info */}
+        <div style={info}>
+          <div style={trackTitle}>{title}</div>
+          <div style={sub}>
+            Preview: {secondsLeft}s left
+            {error ? <span style={{ marginLeft: 10, color: "#ffb3b3" }}>({error})</span> : null}
           </div>
         </div>
+
+        {/* RIGHT spacer (future area) */}
+        <div style={{ width: 120 }} />
 
         <audio ref={audioRef} />
       </div>
@@ -113,13 +124,73 @@ export default function BottomPlayer({
   );
 }
 
-const btn = {
+const wrap = {
+  position: "fixed",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  padding: "14px 16px",
+  borderTop: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.55)",
+  backdropFilter: "blur(12px)",
+};
+
+const inner = {
+  maxWidth: 1200,
+  margin: "0 auto",
+  display: "flex",
+  alignItems: "center",
+  gap: 16,
+};
+
+const leftControls = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexShrink: 0,
+};
+
+const iconBtn = {
   cursor: "pointer",
   color: "white",
-  fontWeight: 900,
+  fontWeight: 1000,
   padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.18)",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.16)",
   background: "rgba(255,255,255,0.06)",
   fontFamily: "system-ui",
+  minWidth: 52,
+};
+
+const playBtn = {
+  width: 52,
+  height: 52,
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.20)",
+  background: "rgba(255,255,255,0.12)",
+  color: "white",
+  fontFamily: "system-ui",
+  fontWeight: 1000,
+  fontSize: 18,
+  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+};
+
+const info = {
+  flex: 1,
+  minWidth: 0,
+  color: "white",
+  fontFamily: "system-ui",
+};
+
+const trackTitle = {
+  fontWeight: 950,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const sub = {
+  fontSize: 12,
+  opacity: 0.82,
+  marginTop: 2,
 };

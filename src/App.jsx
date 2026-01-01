@@ -268,17 +268,14 @@ export default function App() {
 
       {/* Global Bottom Freeze Player (no scrub) */}
       <BottomPlayer
-        track={activeTrack}
-        isPlaying={isPlaying}
-        onPlayPause={(next) => setIsPlaying(Boolean(next))}
-        onPrev={onPrev}
-        onNext={onNext}
-        shuffle={shuffle}
-        onToggleShuffle={() => setShuffle((v) => !v)}
-        repeat={repeat}
-        onToggleRepeat={() => setRepeat((v) => !v)}
-        previewSeconds={30}
-      />
+  track={activeTrack}
+  isPlaying={isPlaying}
+  onPlayPause={(next) => setIsPlaying(Boolean(next))}
+  onPrev={onPrev}
+  onNext={onNext}
+  previewSeconds={30}
+/>
+
     </div>
   );
 }
