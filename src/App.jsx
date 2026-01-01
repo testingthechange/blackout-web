@@ -55,10 +55,10 @@ export default function App() {
   const nav = useNavigate();
   const { isAuthed, setIsAuthed } = useAuth();
 
-  // global search (same size + same place on all pages)
+  // Search (global, same size/location)
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Phase 0 ping
+  // Backend ping
   const [backendStatus, setBackendStatus] = useState("checking");
   useEffect(() => {
     const base = import.meta.env.VITE_ALBUM_BACKEND_URL;
@@ -71,7 +71,7 @@ export default function App() {
       .catch(() => setBackendStatus("fail"));
   }, []);
 
-  // Global player state (single source of truth)
+  // Global player state
   const [activeProductId, setActiveProductId] = useState("album-001");
   const product = useMemo(() => getProduct(activeProductId), [activeProductId]);
 
@@ -82,7 +82,6 @@ export default function App() {
     [tracks, activeTrackId]
   );
 
-  // keep activeTrackId valid when product changes
   useEffect(() => {
     if (!tracks.length) return;
     if (!tracks.some((t) => t.id === activeTrackId)) {
@@ -92,8 +91,6 @@ export default function App() {
   }, [activeProductId]);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [shuffle, setShuffle] = useState(false);
-  const [repeat, setRepeat] = useState(false);
 
   const onPrev = () => {
     if (!tracks.length) return;
@@ -105,15 +102,6 @@ export default function App() {
 
   const onNext = () => {
     if (!tracks.length) return;
-
-    if (shuffle) {
-      const other = tracks.filter((t) => t.id !== activeTrackId);
-      const pick = other[Math.floor(Math.random() * other.length)] || tracks[0];
-      setActiveTrackId(pick.id);
-      setIsPlaying(true);
-      return;
-    }
-
     const idx = tracks.findIndex((t) => t.id === activeTrackId);
     const nextIdx = idx >= tracks.length - 1 ? 0 : idx + 1;
     setActiveTrackId(tracks[nextIdx].id);
@@ -129,20 +117,19 @@ export default function App() {
     <div
       style={{
         minHeight: "100vh",
-        background: "radial-gradient(circle at 30% 20%, #0b1633 0%, #060a16 55%, #04060c 100%)",
+        background:
+          "radial-gradient(circle at 30% 20%, #0b1633 0%, #060a16 55%, #04060c 100%)",
       }}
     >
-      {/* pad bottom so content doesn't hide behind player */}
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 110px" }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 900, letterSpacing: 0.3 }}>
-              blackout
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ color: "white", fontFamily: "system-ui", fontWeight: 900 }}>
+              Block Radius
             </div>
             <div
               style={{
-                fontFamily: "system-ui",
                 fontSize: 12,
                 fontWeight: 900,
                 padding: "6px 10px",
@@ -150,7 +137,6 @@ export default function App() {
                 border: "1px solid rgba(255,255,255,0.14)",
                 background: "rgba(255,255,255,0.06)",
                 color: "white",
-                opacity: 0.9,
               }}
             >
               Backend:{" "}
@@ -161,8 +147,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right: Login/Logout + Search under it */}
-          <div style={{ display: "grid", justifyItems: "end", gap: 10 }}>
+          <div style={{ display: "grid", gap: 10, justifyItems: "end" }}>
             {!isAuthed ? (
               <button
                 onClick={() => nav(`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`)}
@@ -186,7 +171,7 @@ export default function App() {
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search (phase 1 stub)"
+              placeholder="Search"
               style={searchInput}
             />
           </div>
@@ -196,27 +181,11 @@ export default function App() {
           {/* Side nav */}
           <div style={sideNav}>
             <div style={navHeader}>Public</div>
-            <div style={{ display: "grid", gap: 10 }}>
-              <NavLink to="/shop">Shop</NavLink>
-            </div>
-
-            <div style={{ height: 14 }} />
-
-            <div style={navHeader}>Internal</div>
-            {!isAuthed ? (
-              <div style={{ color: "white", opacity: 0.65, fontFamily: "system-ui", fontSize: 12, lineHeight: 1.4 }}>
-                Login to access internal pages.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                <NavLink to="/account">Account</NavLink>
-                <NavLink to="/tools">Export/Tools</NavLink>
-              </div>
-            )}
+            <NavLink to="/shop">Shop</NavLink>
           </div>
 
           {/* Main */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1 }}>
             <Routes>
               <Route path="/" element={<Navigate to="/shop" replace />} />
               <Route path="/shop" element={<Shop />} />
@@ -235,89 +204,56 @@ export default function App() {
               />
               <Route path="/sold" element={<Sold />} />
               <Route path="/login" element={<Login />} />
-
-              <Route
-                path="/account"
-                element={
-                  <RequireAuth>
-                    <div style={{ color: "white", fontFamily: "system-ui" }}>
-                      <h1 style={{ marginTop: 0 }}>Account</h1>
-                      <p style={{ opacity: 0.85 }}>Phase 1 placeholder (My Collection comes next).</p>
-                    </div>
-                  </RequireAuth>
-                }
-              />
-
-              <Route
-                path="/tools"
-                element={
-                  <RequireAuth>
-                    <div style={{ color: "white", fontFamily: "system-ui" }}>
-                      <h1 style={{ marginTop: 0 }}>Export/Tools</h1>
-                      <p style={{ opacity: 0.85 }}>Placeholder.</p>
-                    </div>
-                  </RequireAuth>
-                }
-              />
-
               <Route path="*" element={<Navigate to="/shop" replace />} />
             </Routes>
           </div>
         </div>
       </div>
 
-      {/* Global Bottom Freeze Player (no scrub) */}
       <BottomPlayer
-  track={activeTrack}
-  isPlaying={isPlaying}
-  onPlayPause={(next) => setIsPlaying(Boolean(next))}
-  onPrev={onPrev}
-  onNext={onNext}
-  previewSeconds={30}
-/>
-
+        track={activeTrack}
+        isPlaying={isPlaying}
+        onPlayPause={(next) => setIsPlaying(Boolean(next))}
+        onPrev={onPrev}
+        onNext={onNext}
+        previewSeconds={30}
+      />
     </div>
   );
 }
 
 const topBtn = {
-  cursor: "pointer",
-  color: "white",
-  fontWeight: 900,
+  width: 140,
   padding: "10px 14px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
-  fontFamily: "system-ui",
-  width: 140,
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
 };
 
 const searchInput = {
-  width: 280,
-  height: 40,
-  padding: "0 12px",
+  width: 420,
+  height: 44,
+  padding: "0 14px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
   color: "white",
-  outline: "none",
-  fontFamily: "system-ui",
   fontWeight: 800,
+  outline: "none",
 };
 
 const sideNav = {
   width: 220,
-  flexShrink: 0,
   border: "1px solid rgba(255,255,255,0.12)",
   borderRadius: 14,
   padding: 12,
-  height: "fit-content",
   background: "rgba(255,255,255,0.04)",
 };
 
 const navHeader = {
-  color: "white",
-  fontFamily: "system-ui",
   fontWeight: 900,
   opacity: 0.85,
   marginBottom: 10,

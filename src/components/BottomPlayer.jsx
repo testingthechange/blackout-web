@@ -9,50 +9,31 @@ export default function BottomPlayer({
   previewSeconds = 30,
 }) {
   const audioRef = useRef(null);
-  const [error, setError] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(previewSeconds);
 
-  const title = useMemo(() => (track ? track.title || "Untitled" : "No track selected"), [track]);
+  const title = useMemo(
+    () => (track ? track.title || "Untitled" : "No track selected"),
+    [track]
+  );
 
-  // Load audio when track changes
   useEffect(() => {
-    setError("");
-    setSecondsLeft(previewSeconds);
-
     const el = audioRef.current;
-    if (!el) return;
-
-    if (!track?.previewUrl) {
-      el.pause();
-      el.removeAttribute("src");
-      el.load();
-      return;
-    }
+    if (!el || !track?.previewUrl) return;
 
     el.pause();
     el.src = track.previewUrl;
     el.currentTime = 0;
     el.load();
 
-    if (isPlaying) {
-      el.play().catch((e) => setError(e?.message || "Audio play failed"));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (isPlaying) el.play();
   }, [track?.previewUrl]);
 
-  // React to play/pause state
   useEffect(() => {
     const el = audioRef.current;
-    if (!el || !track?.previewUrl) return;
+    if (!el) return;
+    isPlaying ? el.play() : el.pause();
+  }, [isPlaying]);
 
-    if (isPlaying) {
-      el.play().catch((e) => setError(e?.message || "Audio play failed"));
-    } else {
-      el.pause();
-    }
-  }, [isPlaying, track?.previewUrl]);
-
-  // 30s preview cap
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -61,7 +42,6 @@ export default function BottomPlayer({
       const t = el.currentTime || 0;
       const remaining = Math.max(0, Math.ceil(previewSeconds - t));
       setSecondsLeft(remaining);
-
       if (t >= previewSeconds) {
         el.pause();
         el.currentTime = 0;
@@ -69,54 +49,25 @@ export default function BottomPlayer({
       }
     };
 
-    const onEnded = () => {
-      onNext();
-    };
-
     el.addEventListener("timeupdate", onTime);
-    el.addEventListener("ended", onEnded);
-    return () => {
-      el.removeEventListener("timeupdate", onTime);
-      el.removeEventListener("ended", onEnded);
-    };
-  }, [previewSeconds, onNext, onPlayPause]);
-
-  const playDisabled = !track?.previewUrl;
+    return () => el.removeEventListener("timeupdate", onTime);
+  }, [previewSeconds, onPlayPause]);
 
   return (
     <div style={wrap}>
       <div style={inner}>
-        {/* LEFT controls */}
-        <div style={leftControls}>
-          <button onClick={onPrev} style={iconBtn} aria-label="Previous">
-            ‹‹
-          </button>
-
-          <button
-            onClick={() => onPlayPause(!isPlaying)}
-            style={{ ...playBtn, opacity: playDisabled ? 0.5 : 1, cursor: playDisabled ? "not-allowed" : "pointer" }}
-            aria-label={isPlaying ? "Pause" : "Play"}
-            disabled={playDisabled}
-          >
+        <div style={controls}>
+          <button onClick={onPrev} style={iconBtn}>‹‹</button>
+          <button onClick={() => onPlayPause(!isPlaying)} style={playBtn}>
             {isPlaying ? "❚❚" : "▶"}
           </button>
-
-          <button onClick={onNext} style={iconBtn} aria-label="Next">
-            ››
-          </button>
+          <button onClick={onNext} style={iconBtn}>››</button>
         </div>
 
-        {/* CENTER info */}
         <div style={info}>
-          <div style={trackTitle}>{title}</div>
-          <div style={sub}>
-            Preview: {secondsLeft}s left
-            {error ? <span style={{ marginLeft: 10, color: "#ffb3b3" }}>({error})</span> : null}
-          </div>
+          <div style={titleStyle}>{title}</div>
+          <div style={sub}>Preview: {secondsLeft}s</div>
         </div>
-
-        {/* RIGHT spacer (future area) */}
-        <div style={{ width: 120 }} />
 
         <audio ref={audioRef} />
       </div>
@@ -126,12 +77,12 @@ export default function BottomPlayer({
 
 const wrap = {
   position: "fixed",
+  bottom: 0,
   left: 0,
   right: 0,
-  bottom: 0,
   padding: "14px 16px",
   borderTop: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(0,0,0,0.55)",
+  background: "rgba(32,32,32,0.92)",
   backdropFilter: "blur(12px)",
 };
 
@@ -143,47 +94,40 @@ const inner = {
   gap: 16,
 };
 
-const leftControls = {
+const controls = {
   display: "flex",
-  alignItems: "center",
   gap: 10,
-  flexShrink: 0,
 };
 
 const iconBtn = {
-  cursor: "pointer",
-  color: "white",
-  fontWeight: 1000,
   padding: "10px 12px",
   borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.16)",
   background: "rgba(255,255,255,0.06)",
-  fontFamily: "system-ui",
-  minWidth: 52,
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
 };
 
 const playBtn = {
   width: 52,
   height: 52,
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.20)",
-  background: "rgba(255,255,255,0.12)",
+  borderRadius: "50%",
+  border: "1px solid rgba(255,255,255,0.2)",
+  background: "rgba(255,255,255,0.14)",
   color: "white",
-  fontFamily: "system-ui",
-  fontWeight: 1000,
   fontSize: 18,
-  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+  fontWeight: 900,
+  cursor: "pointer",
 };
 
 const info = {
   flex: 1,
-  minWidth: 0,
   color: "white",
-  fontFamily: "system-ui",
 };
 
-const trackTitle = {
-  fontWeight: 950,
+const titleStyle = {
+  fontWeight: 900,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -191,6 +135,5 @@ const trackTitle = {
 
 const sub = {
   fontSize: 12,
-  opacity: 0.82,
-  marginTop: 2,
+  opacity: 0.8,
 };
