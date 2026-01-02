@@ -1,5 +1,5 @@
 // src/App.jsx
-import { Routes, Route, Link, useLocation } from "react-router-dom";
+import { Routes, Route, Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 
 import Home from "./pages/Home.jsx";
@@ -10,9 +10,6 @@ import Sold from "./pages/Sold.jsx";
 import Login from "./pages/Login.jsx";
 
 import BottomPlayer from "./components/BottomPlayer.jsx";
-
-// IMPORTANT: keep this env name consistent with your Render env var
-const BACKEND_ENV_KEY = "VITE_ALBUM_BACKEND_URL";
 
 function useAuth() {
   const [isAuthed, setIsAuthed] = useState(Boolean(localStorage.getItem("authToken")));
@@ -26,29 +23,35 @@ function useAuth() {
 
 export default function App() {
   const loc = useLocation();
+  const nav = useNavigate();
   const { isAuthed, setIsAuthed } = useAuth();
 
-  // Global backend ping (header badge)
+  // ✅ use ONE env key everywhere
+  const BACKEND_BASE = String(import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
+
+  // backend badge
   const [backendStatus, setBackendStatus] = useState("checking");
   useEffect(() => {
-    const base = import.meta.env[BACKEND_ENV_KEY];
-    if (!base) {
+    if (!BACKEND_BASE) {
       setBackendStatus("missing");
       return;
     }
-    fetch(`${String(base).replace(/\/+$/, "")}/api/health`)
+    fetch(`${BACKEND_BASE}/api/health`)
       .then((res) => setBackendStatus(res.ok ? "ok" : "fail"))
       .catch(() => setBackendStatus("fail"));
-  }, []);
+  }, [BACKEND_BASE]);
 
-  // Global shell search (under login area) - keeps stable, doesn’t vanish
+  // global shell search
   const [q, setQ] = useState("");
 
-  // ----- PLAYER STATE (page-scoped behavior, shared UI) -----
-  // Shop uses preview mode, Account uses full mode. Same visual location.
+  // ----- Player state -----
   const [playerMode, setPlayerMode] = useState("preview"); // "preview" | "full"
   const [activeTrack, setActiveTrack] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // show player only on these pages (NOT home)
+  const playerVisible =
+    loc.pathname.startsWith("/shop") || loc.pathname.startsWith("/account") || loc.pathname.startsWith("/sold");
 
   const onPickTrackPreview = (track) => {
     setPlayerMode("preview");
@@ -62,18 +65,15 @@ export default function App() {
     setIsPlaying(true);
   };
 
-  // Player visible only on these routes (NOT on Home)
-  const playerVisible =
-    loc.pathname.startsWith("/shop") ||
-    loc.pathname.startsWith("/account") ||
-    loc.pathname.startsWith("/sold");
-
-  const isHome = loc.pathname === "/";
+  // ✅ restore onBuy so Product never gets undefined
+  const onBuy = (productId) => {
+    nav(`/sold?productId=${encodeURIComponent(productId)}`);
+  };
 
   return (
     <div style={appBg}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "14px 18px 110px" }}>
-        {/* Top Row */}
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: playerVisible ? "14px 18px 110px" : "14px 18px 18px" }}>
+        {/* Header */}
         <div style={topRow}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={brand}>Block Radius</div>
@@ -89,7 +89,7 @@ export default function App() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {!isAuthed ? (
-              <Link to="/login" style={topBtnLink}>
+              <Link to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} style={topBtnLink}>
                 Login
               </Link>
             ) : (
@@ -97,6 +97,7 @@ export default function App() {
                 onClick={() => {
                   localStorage.removeItem("authToken");
                   setIsAuthed(false);
+                  nav("/");
                 }}
                 style={topBtn}
               >
@@ -106,9 +107,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* Small global nav */}
+        {/* Top nav */}
         <div style={navRow}>
-          <Link to="/" style={navLink(isHome)}>
+          <Link to="/" style={navLink(loc.pathname === "/")}>
             Home
           </Link>
           <Link to="/shop" style={navLink(loc.pathname.startsWith("/shop"))}>
@@ -119,30 +120,32 @@ export default function App() {
           </Link>
         </div>
 
-        {/* Global search (under login area) */}
+        {/* Global search */}
         <div style={{ marginTop: 10, marginBottom: 16 }}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" style={search} />
         </div>
 
         {/* Routes */}
         <Routes>
-          {/* ✅ Home is primary: NO redirect */}
           <Route path="/" element={<Home />} />
 
           <Route path="/shop" element={<Shop q={q} onPickTrack={onPickTrackPreview} />} />
-          <Route path="/shop/:productId" element={<Product q={q} onPickTrack={onPickTrackPreview} />} />
+
+          <Route
+            path="/shop/:productId"
+            element={<Product q={q} onPickTrack={onPickTrackPreview} onBuy={onBuy} />}
+          />
 
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
 
           <Route path="/account" element={<MyAccount q={q} onPickTrack={onPickTrackFull} />} />
 
-          {/* fallback */}
           <Route path="*" element={<Home />} />
         </Routes>
       </div>
 
-      {/* ✅ Player NOT shown on Home */}
+      {/* Bottom player (not on Home) */}
       {playerVisible ? (
         <BottomPlayer
           mode={playerMode}
