@@ -1,308 +1,204 @@
-// src/pages/MyAccount.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { getProduct } from "../data/catalog.js";
+import { useEffect, useMemo, useState } from "react";
+import { CATALOG } from "../data/catalog";
 
-const PURCHASES_KEY = "blackout:purchases";
-const MODE_KEY = "blackout:mode"; // "album" | "smartbridge"
-const ACTIVE_KEY = "blackout:activeProductId";
-
-function safeParse(json) {
+function safeJsonParse(s) {
   try {
-    return JSON.parse(json);
+    return JSON.parse(s);
   } catch {
     return null;
   }
 }
 
-function loadPurchases() {
-  const raw = localStorage.getItem(PURCHASES_KEY);
-  const parsed = raw ? safeParse(raw) : null;
-  return Array.isArray(parsed) ? parsed : [];
-}
+function getCachedPublishedAlbums() {
+  // If you visited /shop?shareId=... we cache sb:manifest:<shareId>
+  // Also store sb:lastShareId for convenience.
+  const last = String(localStorage.getItem("sb:lastShareId") || "").trim();
+  const ids = new Set();
+  if (last) ids.add(last);
 
-export default function MyAccount() {
-  const [mode, setMode] = useState(() => localStorage.getItem(MODE_KEY) || "album");
+  // You can add more later; for now, just last is enough to show "2 albums" during local testing.
+  const out = [];
+  ids.forEach((sid) => {
+    const k = `sb:manifest:${sid}`;
+    const m = safeJsonParse(localStorage.getItem(k) || "");
+    if (!m?.ok || !Array.isArray(m?.tracks)) return;
 
-  const purchases = useMemo(() => loadPurchases(), []);
-  const albums = useMemo(() => {
-    return purchases
-      .map((p) => {
-        const productId = String(p?.productId || "").trim();
-        if (!productId) return null;
-        const prod = getProduct(productId);
-        if (!prod) return null;
-        return { ...prod, purchasedAt: p?.purchasedAt || "" };
-      })
-      .filter(Boolean);
-  }, [purchases]);
-
-  const [activeProductId, setActiveProductId] = useState(() => {
-    const saved = localStorage.getItem(ACTIVE_KEY);
-    const first = albums[0]?.id;
-    return saved || first || "album-001";
+    out.push({
+      id: `published-${m.shareId}`,
+      albumName: "Published Album",
+      artist: "Smart Bridge",
+      coverUrl: (CATALOG?.[0]?.coverUrl) || "",
+      releaseDate: m.publishedAt ? String(m.publishedAt).slice(0, 10) : "—",
+      tracks: m.tracks.map((t, i) => ({
+        id: `pub-${m.shareId}-${i}`,
+        title: t.title || `Track ${i + 1}`,
+        // account is FULL mode: we use url
+        url: t.url,
+        previewUrl: t.url,
+      })),
+      shareId: m.shareId,
+      isPublished: true,
+    });
   });
 
-  const activeAlbum = useMemo(
-    () => getProduct(activeProductId) || albums[0] || null,
-    [activeProductId, albums]
-  );
+  return out;
+}
 
-  const tracks = activeAlbum?.tracks || [];
+export default function MyAccount({ q = "", backendBase = "", onPickTrack }) {
+  const fallbackOwned = useMemo(() => {
+    const p = CATALOG?.[0];
+    if (!p) return [];
+    // Treat fallback album as "owned" placeholder for now
+    return [p];
+  }, []);
 
-  const setModeAndPersist = (next) => {
-    setMode(next);
-    localStorage.setItem(MODE_KEY, next);
-  };
+  const [pubAlbums, setPubAlbums] = useState([]);
 
-  const pickAlbum = (id) => {
-    setActiveProductId(id);
-    localStorage.setItem(ACTIVE_KEY, id);
-  };
+  useEffect(() => {
+    setPubAlbums(getCachedPublishedAlbums());
+  }, []);
 
-  const playTrackNow = (trackId) => {
-    if (!activeAlbum?.id || !trackId) return;
-    window.dispatchEvent(
-      new CustomEvent("blackout:play", { detail: { productId: activeAlbum.id, trackId } })
-    );
-  };
+  const albums = useMemo(() => {
+    const all = [...pubAlbums, ...fallbackOwned];
+    const needle = String(q || "").trim().toLowerCase();
+    if (!needle) return all;
 
-  // ---------- Mini Nav (Account page only) ----------
-  const [openTab, setOpenTab] = useState(null); // "collection" | "playlist" | "swag" | "other" | null
-  const [menuPos, setMenuPos] = useState({ left: 0, top: 0, width: 240 });
-  const miniNavCardRef = useRef(null);
-  const tabRefs = useRef({}); // { key: HTMLButtonElement }
+    return all.filter((a) => {
+      const s = `${a?.albumName || ""} ${a?.artist || ""}`.toLowerCase();
+      return s.includes(needle);
+    });
+  }, [pubAlbums, fallbackOwned, q]);
 
-  const toggleTab = (key) => {
-    if (openTab === key) {
-      setOpenTab(null);
+  const [activeAlbumId, setActiveAlbumId] = useState(albums[0]?.id || null);
+  useEffect(() => {
+    if (!albums.length) {
+      setActiveAlbumId(null);
       return;
     }
-
-    // position dropdown under clicked tab
-    const card = miniNavCardRef.current;
-    const btn = tabRefs.current[key];
-    if (card && btn) {
-      const cardRect = card.getBoundingClientRect();
-      const btnRect = btn.getBoundingClientRect();
-
-      const left = Math.max(12, Math.min(btnRect.left - cardRect.left, cardRect.width - 260));
-      const top = btnRect.bottom - cardRect.top + 10;
-
-      setMenuPos({
-        left,
-        top,
-        width: 260,
-      });
+    if (!albums.some((a) => a.id === activeAlbumId)) {
+      setActiveAlbumId(albums[0].id);
     }
-    setOpenTab(key);
-  };
+  }, [albums, activeAlbumId]);
 
-  // close on outside click / esc
-  useEffect(() => {
-    if (!openTab) return;
+  const activeAlbum = albums.find((a) => a.id === activeAlbumId) || albums[0] || null;
+  const tracks = activeAlbum?.tracks || [];
 
-    const onDown = (e) => {
-      const card = miniNavCardRef.current;
-      if (!card) return;
-      if (!card.contains(e.target)) setOpenTab(null);
-    };
-
-    const onKey = (e) => {
-      if (e.key === "Escape") setOpenTab(null);
-    };
-
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [openTab]);
-
-  const tabLabel = (k) =>
-    k === "collection" ? "My Collection" : k === "playlist" ? "Playlist" : k === "swag" ? "Swag" : "Other";
+  // Mini nav popup (account-only)
+  const [modal, setModal] = useState(null); // "mycollection"|"playlist"|"swag"|"other"|null
 
   return (
     <div style={{ color: "white", fontFamily: "system-ui" }}>
-      <h1 style={{ marginTop: 0, marginBottom: 8 }}>Account</h1>
-
-      {/* Thumbnails */}
-      <div style={{ marginTop: 10, ...card }}>
-        <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>My Collection</div>
-
-        {!albums.length ? (
-          <div style={{ opacity: 0.75, fontSize: 13, lineHeight: 1.5 }}>
-            No albums yet. Buy one in Shop, confirm on Sold page — it will appear here.
-          </div>
-        ) : (
-          <div style={thumbRow}>
-            {albums.map((a) => {
-              const isActive = a.id === activeProductId;
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => pickAlbum(a.id)}
-                  style={{
-                    ...thumbBtn,
-                    borderColor: isActive ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.12)",
-                    background: isActive ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
-                    opacity: isActive ? 1 : 0.9,
-                  }}
-                  title={`${a.albumName} — ${a.artist}`}
-                >
-                  <img
-                    src={a.coverUrl}
-                    alt="cover"
-                    style={{
-                      width: 84,
-                      height: 84,
-                      borderRadius: 12,
-                      objectFit: "cover",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                    }}
-                  />
-                  <div style={thumbTitle}>{a.albumName}</div>
-                  <div style={thumbSub}>{a.artist}</div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Mode */}
-      <div style={{ marginTop: 14, ...card }}>
-        <div style={{ fontWeight: 950, fontSize: 14, opacity: 0.92, marginBottom: 10 }}>Mode</div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <label style={radioRow}>
-            <input type="radio" name="mode" checked={mode === "album"} onChange={() => setModeAndPersist("album")} />
-            <span>Album</span>
-          </label>
-
-          <label style={radioRow}>
-            <input
-              type="radio"
-              name="mode"
-              checked={mode === "smartbridge"}
-              onChange={() => setModeAndPersist("smartbridge")}
-            />
-            <span>Smart Bridge</span>
-          </label>
-
-          <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.7 }}>(wiring next)</div>
+      <div style={pageCard}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h1 style={{ marginTop: 0, marginBottom: 0 }}>Account</h1>
+          <div style={{ fontSize: 12, opacity: 0.75 }}>Owned albums + full playback</div>
         </div>
-      </div>
 
-      {/* Two-column */}
-      <div style={{ marginTop: 14, ...pageCard }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16 }}>
-          {/* Left cover */}
+        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16 }}>
+          {/* LEFT: Album thumbnails */}
           <div style={card}>
-            <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.9 }}>Cover</div>
-            {activeAlbum ? (
-              <img
-                src={activeAlbum.coverUrl}
-                alt="cover"
-                style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)" }}
-              />
-            ) : (
-              <div style={{ opacity: 0.75 }}>No active album selected.</div>
-            )}
+            <div style={{ fontWeight: 1000, marginBottom: 10 }}>My Albums</div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+              {albums.map((a) => {
+                const active = a.id === activeAlbumId;
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => setActiveAlbumId(a.id)}
+                    style={{
+                      ...thumbBtn,
+                      borderColor: active ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.14)",
+                      background: active ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    <img
+                      src={a.coverUrl}
+                      alt="cover"
+                      style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)" }}
+                    />
+                    <div style={{ marginTop: 10, fontWeight: 1000, textAlign: "left" }}>
+                      {a.albumName}
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 12, opacity: 0.8, textAlign: "left" }}>
+                      {a.artist}
+                    </div>
+                    {a.isPublished ? (
+                      <div style={{ marginTop: 6, fontSize: 11, opacity: 0.75, textAlign: "left" }}>
+                        Published • {a.shareId}
+                      </div>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Right cards */}
+          {/* RIGHT: Mini nav + tracks */}
           <div style={{ display: "grid", gap: 16 }}>
-            {/* Album info */}
+            {/* Page-only mini nav card */}
+            <div style={card}>
+              <div style={{ fontWeight: 1000, marginBottom: 10 }}>My Collection</div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button style={tabBtn} onClick={() => setModal("mycollection")}>My Collection</button>
+                <button style={tabBtn} onClick={() => setModal("playlist")}>Playlist</button>
+                <button style={tabBtn} onClick={() => setModal("swag")}>Swag</button>
+                <button style={tabBtn} onClick={() => setModal("other")}>Other</button>
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+                Tabs open a quick popup (placeholder).
+              </div>
+            </div>
+
+            {/* Active album info */}
             <div style={card}>
               <div style={{ fontWeight: 1000, fontSize: 18 }}>{activeAlbum?.albumName || "—"}</div>
               <div style={{ opacity: 0.85, marginTop: 4 }}>{activeAlbum?.artist || ""}</div>
               <div style={{ opacity: 0.75, marginTop: 6, fontSize: 12 }}>
-                Release Date: {activeAlbum?.releaseDate || "—"}
+                Full mode playback (owned).
               </div>
             </div>
 
-            {/* ✅ Mini Nav Card (page-only) */}
-            <div ref={miniNavCardRef} style={{ ...card, position: "relative" }}>
-              <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>Mini Nav</div>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {["collection", "playlist", "swag", "other"].map((k) => {
-                  const active = openTab === k;
-                  return (
-                    <button
-                      key={k}
-                      ref={(el) => (tabRefs.current[k] = el)}
-                      onClick={() => toggleTab(k)}
-                      style={{
-                        ...pillBtn,
-                        background: active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)",
-                        opacity: active ? 1 : 0.9,
-                      }}
-                    >
-                      {tabLabel(k)}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {openTab ? (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: menuPos.left,
-                    top: menuPos.top,
-                    width: menuPos.width,
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.16)",
-                    background: "rgba(10,12,16,0.96)",
-                    boxShadow: "0 18px 45px rgba(0,0,0,0.45)",
-                    padding: 10,
-                    zIndex: 50,
-                    backdropFilter: "blur(10px)",
-                  }}
-                >
-                  <div style={{ fontWeight: 1000, marginBottom: 8 }}>{tabLabel(openTab)}</div>
-
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <button style={menuItem} onClick={() => window.alert(`${tabLabel(openTab)}: coming soon`)}>
-                      Open
-                    </button>
-                    <button style={menuItem} onClick={() => window.alert("Placeholder action")}>
-                      Manage
-                    </button>
-                    <button style={menuItem} onClick={() => setOpenTab(null)}>
-                      Close
-                    </button>
-                  </div>
-
-                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
-                    Click outside or press Esc to close.
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            {/* Tracks */}
+            {/* Tracks list (click plays — no preview labels, no routing) */}
             <div style={card}>
-              <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10, opacity: 0.92 }}>Album Tracks</div>
-
-              {!tracks.length ? (
-                <div style={{ opacity: 0.75, fontSize: 13 }}>No tracks yet.</div>
-              ) : (
-                <div style={{ display: "grid", gap: 8 }}>
-                  {tracks.map((t, idx) => (
-                    <button key={t.id || idx} style={trackRow} onClick={() => playTrackNow(t.id)} title="Play">
-                      <span style={{ fontWeight: 950 }}>{t.title}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>Click a track to play (full).</div>
+              <div style={{ fontWeight: 1000, marginBottom: 10 }}>Album Tracks</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {tracks.map((t, i) => (
+                  <button
+                    key={t.id || i}
+                    onClick={() => onPickTrack?.({ tracks, index: i })}
+                    style={trackBtn}
+                  >
+                    {t.title}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+                Track click = play in bottom player (FULL).
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Popup modal */}
+      {modal ? (
+        <div style={modalWrap} onMouseDown={() => setModal(null)}>
+          <div style={modalCard} onMouseDown={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 1000, fontSize: 16 }}>
+              {modal === "mycollection" ? "My Collection" :
+               modal === "playlist" ? "Playlist" :
+               modal === "swag" ? "Swag" : "Other"}
+            </div>
+            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8, lineHeight: 1.5 }}>
+              Placeholder popup — next we wire real content.
+            </div>
+            <button style={{ ...tabBtn, marginTop: 14 }} onClick={() => setModal(null)}>
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -321,71 +217,57 @@ const card = {
   background: "rgba(255,255,255,0.04)",
 };
 
-const radioRow = { display: "flex", gap: 8, alignItems: "center", fontWeight: 950, opacity: 0.9 };
-
-const thumbRow = { display: "flex", gap: 12, overflowX: "auto", paddingBottom: 6 };
-
 const thumbBtn = {
   cursor: "pointer",
   textAlign: "left",
-  padding: 12,
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.03)",
-  color: "white",
-  flex: "0 0 auto",
-};
-
-const thumbTitle = {
-  marginTop: 8,
-  fontWeight: 950,
-  fontSize: 12,
-  maxWidth: 110,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const thumbSub = {
-  opacity: 0.7,
-  fontSize: 12,
-  maxWidth: 110,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const trackRow = {
-  cursor: "pointer",
-  width: "100%",
-  textAlign: "left",
-  padding: "10px 12px",
-  borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.05)",
+  background: "rgba(255,255,255,0.06)",
+  padding: 12,
   color: "white",
   fontFamily: "system-ui",
 };
 
-const pillBtn = {
+const trackBtn = {
   cursor: "pointer",
-  fontSize: 12,
-  fontWeight: 950,
-  padding: "8px 10px",
+  textAlign: "left",
+  color: "white",
+  fontWeight: 1000,
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.06)",
+  fontFamily: "system-ui",
+};
+
+const tabBtn = {
+  cursor: "pointer",
+  color: "white",
+  fontWeight: 1000,
+  padding: "9px 10px",
   borderRadius: 999,
   border: "1px solid rgba(255,255,255,0.16)",
   background: "rgba(255,255,255,0.06)",
-  color: "white",
+  fontFamily: "system-ui",
+  fontSize: 12,
 };
 
-const menuItem = {
-  cursor: "pointer",
-  textAlign: "left",
-  width: "100%",
-  padding: "10px 10px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
+const modalWrap = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.55)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+};
+
+const modalCard = {
+  width: "min(520px, 100%)",
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(25,25,25,0.92)",
   color: "white",
-  fontWeight: 900,
+  padding: 16,
+  backdropFilter: "blur(10px)",
 };

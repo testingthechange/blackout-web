@@ -1,151 +1,147 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { CATALOG } from "../data/catalog";
+import { Link } from "react-router-dom";
 
-function useQuery() {
-  const loc = useLocation();
-  return useMemo(() => new URLSearchParams(loc.search), [loc.search]);
+const cacheKey = (sid) => `sb:manifest:${sid}`;
+
+function safeParse(s) {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
 }
 
-export default function Shop() {
-  const fallback = CATALOG[0];
-
-  const q = useQuery();
-  const shareId = String(q.get("shareId") || "").trim();
-
-  const [status, setStatus] = useState("idle"); // idle | checking | ok | fail | missing
-  const [album, setAlbum] = useState(null);
+export default function Shop({ backendBase, shareId, onPickTrack }) {
+  const [status, setStatus] = useState("no-shareid"); // missing-env | no-shareid | loading | ok | fail
+  const [manifest, setManifest] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
-    const base = String(import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
+    setErrorMsg("");
 
+    if (!backendBase) {
+      setManifest(null);
+      setStatus("missing-env");
+      return;
+    }
     if (!shareId) {
-      setStatus("idle");
-      setAlbum(null);
-      return;
-    }
-    if (!base) {
-      setStatus("missing");
+      setManifest(null);
+      setStatus("no-shareid");
       return;
     }
 
-    let cancelled = false;
-    setStatus("checking");
+    setStatus("loading");
 
-    fetch(`${base}/api/publish/${encodeURIComponent(shareId)}/manifest`)
-      .then(async (res) => {
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok || !j?.ok) throw new Error(j?.error || `HTTP ${res.status}`);
-        const a = j?.manifest?.album;
-        if (!a || typeof a !== "object") throw new Error("BAD_MANIFEST");
-        if (!cancelled) {
-          setAlbum(a);
-          setStatus("ok");
+    fetch(`${backendBase}/api/publish/${shareId}/manifest`, { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Manifest fetch failed (${r.status})`);
+        const j = await r.json();
+        if (!j?.ok || !Array.isArray(j.tracks)) {
+          throw new Error("Invalid manifest shape");
         }
+        localStorage.setItem(cacheKey(shareId), JSON.stringify(j));
+        setManifest(j);
+        setStatus("ok");
       })
-      .catch(() => {
-        if (!cancelled) setStatus("fail");
+      .catch((e) => {
+        // If live fetch fails, try cached manifest so the UI doesn't fall back to demo.
+        const cached = safeParse(localStorage.getItem(cacheKey(shareId)) || "");
+        if (cached?.ok && Array.isArray(cached.tracks)) {
+          setManifest(cached);
+          setStatus("ok");
+          setErrorMsg(`Using cached manifest (live fetch failed: ${e?.message || "unknown error"})`);
+        } else {
+          setManifest(null);
+          setStatus("fail");
+          setErrorMsg(e?.message || "Manifest fetch failed");
+        }
       });
+  }, [backendBase, shareId]);
 
-    return () => {
-      cancelled = true;
+  const publishedAlbum = useMemo(() => {
+    if (!manifest?.ok || !Array.isArray(manifest.tracks)) return null;
+
+    return {
+      id: manifest.shareId,
+      albumName: "Published Album",
+      artist: "Smart Bridge",
+      // IMPORTANT: keep s3Key so the player page can refresh expired URLs
+      tracks: manifest.tracks.map((t, i) => ({
+        id: `pub-${i}`,
+        title: String(t?.title || `Track ${i + 1}`),
+        url: String(t?.url || ""),
+        s3Key: String(t?.s3Key || ""),
+      })),
     };
-  }, [shareId]);
-
-  const p = album || fallback;
+  }, [manifest]);
 
   return (
-    <div style={{ color: "white", fontFamily: "system-ui" }}>
-      <div style={pageCard}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-          <h1 style={{ marginTop: 0, marginBottom: 10 }}>Shop</h1>
+    <div>
+      <h1>Shop</h1>
 
-          <div style={pill}>
-            Publish:{" "}
-            {!shareId && "NO SHAREID"}
-            {shareId && status === "checking" && "…"}
-            {shareId && status === "ok" && "OK"}
-            {shareId && status === "fail" && "FAIL"}
-            {shareId && status === "missing" && "MISSING ENV"}
-          </div>
+      <div style={{ fontFamily: "monospace", fontSize: 12, opacity: 0.85 }}>
+        Backend: {backendBase || "—"} <br />
+        ShareId: {shareId || "—"} <br />
+        Publish: {status.toUpperCase()}
+      </div>
+
+      {errorMsg ? (
+        <div style={{ marginTop: 10, color: "#b91c1c", fontWeight: 800 }}>
+          {errorMsg}
         </div>
+      ) : null}
 
-        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 12 }}>
-          Test publish by adding <strong>?shareId=TEST123</strong> to the URL.
+      {/* If a shareId is present, NEVER show demo fallback. */}
+      {shareId && !publishedAlbum ? (
+        <div style={{ marginTop: 16 }}>
+          {status === "loading" ? (
+            <div>Loading published album…</div>
+          ) : status === "missing-env" ? (
+            <div>Missing backend env. Set VITE_ALBUM_BACKEND_URL in Blackout and redeploy.</div>
+          ) : status === "fail" ? (
+            <div>
+              Could not load published album for shareId <b>{shareId}</b>.
+            </div>
+          ) : (
+            <div>Waiting…</div>
+          )}
         </div>
+      ) : null}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <div style={card}>
-            <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>Featured</div>
+      {/* Published album card */}
+      {publishedAlbum ? (
+        <div style={{ marginTop: 16 }}>
+          <h3>{publishedAlbum.albumName}</h3>
+          <div>{publishedAlbum.artist}</div>
 
-            <Link to={`/shop/${p.id}`} style={{ display: "block" }}>
-              <img
-                src={p.coverUrl}
-                alt="cover"
-                style={{
-                  width: "100%",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                }}
-              />
-            </Link>
-          </div>
-
-          <div style={card}>
-            <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
-              {p.albumName}
-            </div>
-            <div style={{ opacity: 0.85, marginBottom: 12 }}>
-              {p.artist}
-            </div>
-
-            <Link to={`/shop/${p.id}`} style={linkBtn}>
+          {/* Link directly to the real shareId route */}
+          <div style={{ marginTop: 10 }}>
+            <Link to={`/shop/product/${publishedAlbum.id}`}>
               Go to Product Page →
             </Link>
+          </div>
 
-            <div style={{ marginTop: 14, fontSize: 12, opacity: 0.75 }}>
-              Using {album ? "PUBLISHED MANIFEST" : "FALLBACK"} data.
-            </div>
+          <div style={{ marginTop: 10 }}>
+            <button
+              onClick={() => onPickTrack({ tracks: publishedAlbum.tracks, index: 0 })}
+              disabled={!publishedAlbum.tracks?.length}
+            >
+              Play
+            </button>
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
+            Tracks: {publishedAlbum.tracks.length}
           </div>
         </div>
-      </div>
+      ) : null}
+
+      {/* If no shareId at all, you can show whatever landing content you want */}
+      {!shareId ? (
+        <div style={{ marginTop: 16, opacity: 0.8 }}>
+          Add a shareId in the URL to view a published album.
+        </div>
+      ) : null}
     </div>
   );
 }
-
-const pageCard = {
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 16,
-  padding: 16,
-  background: "rgba(255,255,255,0.04)",
-};
-
-const card = {
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 14,
-  padding: 14,
-  background: "rgba(255,255,255,0.04)",
-};
-
-const linkBtn = {
-  display: "inline-block",
-  textDecoration: "none",
-  color: "white",
-  fontWeight: 900,
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.06)",
-};
-
-const pill = {
-  fontFamily: "system-ui",
-  fontSize: 12,
-  fontWeight: 900,
-  padding: "6px 10px",
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "white",
-  opacity: 0.95,
-};

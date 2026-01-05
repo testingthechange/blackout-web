@@ -1,181 +1,133 @@
 // src/pages/Product.jsx
-import { useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { getProduct } from "../data/catalog.js";
+import React, { useEffect, useMemo, useState } from "react";
+import { loadAlbumBundleByShareId } from "../data/published/loadAlbumBundleByShareId.jsx";
 
-export default function Product({ q = "", onPickTrack, onBuy }) {
-  const { productId } = useParams();
-  const nav = useNavigate();
+// Minimal fetchJson that hits your server route (recommended) or direct storage if allowed.
+async function fetchJson(path) {
+  const res = await fetch(path, { credentials: "include" });
+  if (!res.ok) throw new Error(`fetchJson failed: ${res.status} ${path}`);
+  return await res.json();
+}
 
-  const product = useMemo(() => getProduct(productId), [productId]);
-
-  if (!product) {
-    return (
-      <div style={{ color: "white", fontFamily: "system-ui" }}>
-        <div style={pageCard}>
-          <h1 style={{ marginTop: 0 }}>Product Not Found</h1>
-          <div style={{ opacity: 0.75, marginTop: 6 }}>productId: {String(productId || "")}</div>
-        </div>
-      </div>
-    );
-  }
-
-  const tracks = Array.isArray(product.tracks) ? product.tracks : [];
-
-  // simple filter using global search query
-  const filteredTracks = useMemo(() => {
-    const qq = String(q || "").trim().toLowerCase();
-    if (!qq) return tracks;
-    return tracks.filter((t) => String(t?.title || "").toLowerCase().includes(qq));
-  }, [tracks, q]);
-
-  const safeBuy = () => {
-    // ✅ FIX: never crash if onBuy is missing
-    if (typeof onBuy === "function") {
-      onBuy(product.id);
-      return;
-    }
-    // default fallback: go to Sold
-    nav(`/sold?productId=${encodeURIComponent(product.id)}`);
-  };
-
+function ErrorPanel({ title, details }) {
   return (
-    <div style={{ color: "white", fontFamily: "system-ui" }}>
-      <div style={pageCard}>
-        <h1 style={{ marginTop: 0, marginBottom: 10 }}>Product</h1>
-
-        {/* LEFT COLUMN WIDER */}
-        <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr", gap: 16 }}>
-          {/* Left */}
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Album</div>
-            <img
-              src={product.coverUrl}
-              alt="cover"
-              style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)" }}
-            />
-
-            <div style={{ marginTop: 12, fontSize: 12, opacity: 0.82, lineHeight: 1.55 }}>
-              <div style={{ opacity: 0.9, fontWeight: 900 }}>Meta</div>
-              <div>
-                productId: <span style={{ opacity: 0.95 }}>{product.id}</span>
-              </div>
-              <div>
-                release: <span style={{ opacity: 0.95 }}>{product.releaseDate}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right */}
-          <div style={{ display: "grid", gap: 16 }}>
-            {/* Info */}
-            <div style={card}>
-              <div style={{ fontWeight: 950, fontSize: 18 }}>{product.albumName}</div>
-              <div style={{ opacity: 0.85, marginTop: 4 }}>{product.artist}</div>
-              <div style={{ opacity: 0.75, marginTop: 6, fontSize: 12 }}>Release Date: {product.releaseDate}</div>
-            </div>
-
-            {/* Buy */}
-            <div style={card}>
-              <div style={{ fontWeight: 950, fontSize: 16, marginBottom: 12 }}>Buy</div>
-
-              <button style={buyBtn} onClick={safeBuy} aria-label="Buy album">
-                BUY $17
-              </button>
-
-              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                Purchase is simulated on the next screen.
-              </div>
-            </div>
-
-            {/* Album details */}
-            <div style={card}>
-              <div style={{ fontWeight: 950, fontSize: 16, marginBottom: 10 }}>Album</div>
-              <ul style={bullets}>
-                <li>8 song album</li>
-                <li>Artist authored transitions</li>
-                <li>Two play modes</li>
-                <li>Smart Bridge</li>
-                <li>FREE NFT MP3 album mix</li>
-                <li>and more</li>
-              </ul>
-            </div>
-
-            {/* Tracks */}
-            <div style={card}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>Album Tracks</div>
-
-              <div style={{ display: "grid", gap: 8 }}>
-                {filteredTracks.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      // ✅ this is what triggers the bottom player in Shop preview mode
-                      if (typeof onPickTrack === "function") onPickTrack(t);
-                    }}
-                    style={trackBtn}
-                  >
-                    {t.title}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                Track click plays in the bottom player (preview mode).
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div style={{ padding: 16, border: "1px solid #f00", borderRadius: 8 }}>
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>{title}</div>
+      <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{details}</pre>
     </div>
   );
 }
 
-const pageCard = {
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 16,
-  padding: 16,
-  background: "rgba(255,255,255,0.04)",
-};
+export default function Product() {
+  // Expected route: /shop/product/:shareId
+  const shareId = useMemo(() => {
+    const m = window.location.pathname.match(/\/shop\/product\/([^/]+)/);
+    return m?.[1] || null;
+  }, []);
 
-const card = {
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 14,
-  padding: 14,
-  background: "rgba(255,255,255,0.04)",
-};
+  const [bundle, setBundle] = useState(null);
+  const [err, setErr] = useState(null);
+  const [activeIdx, setActiveIdx] = useState(0);
 
-const buyBtn = {
-  cursor: "pointer",
-  width: "100%",
-  height: 56,
-  borderRadius: 12,
-  border: "1px solid rgba(0,0,0,0.35)",
-  background: "linear-gradient(180deg, rgba(45,215,120,1) 0%, rgba(20,160,85,1) 100%)",
-  color: "white",
-  fontFamily: "system-ui",
-  fontWeight: 1000,
-  fontSize: 18,
-  letterSpacing: 0.6,
-  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-};
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setErr(null);
+        const b = await loadAlbumBundleByShareId({ shareId, fetchJson });
+        if (!alive) return;
+        setBundle(b);
+      } catch (e) {
+        if (!alive) return;
+        setErr(e);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [shareId]);
 
-const trackBtn = {
-  cursor: "pointer",
-  textAlign: "left",
-  color: "white",
-  fontWeight: 900,
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  fontFamily: "system-ui",
-};
+  if (!shareId) {
+    return <ErrorPanel title="Missing shareId" details="No shareId in route." />;
+  }
 
-const bullets = {
-  margin: 0,
-  paddingLeft: 18,
-  lineHeight: 1.6,
-  opacity: 0.9,
-  fontWeight: 800,
-};
+  if (err) {
+    return (
+      <ErrorPanel
+        title="Product failed to load published album bundle"
+        details={String(err?.message || err)}
+      />
+    );
+  }
+
+  if (!bundle) return <div style={{ padding: 16 }}>Loading…</div>;
+
+  // TEMP DEBUG (remove after Phase 0)
+  const dbg = {
+    projectId: bundle?.lineage?.projectId,
+    masterSavePath: bundle?.lineage?.masterSavePath,
+    trackCount: bundle?.album?.tracks?.length,
+    firstTrack: bundle?.album?.tracks?.[0]?.title,
+    firstAudioPath: bundle?.album?.tracks?.[0]?.audioPath,
+    coverArtPath: bundle?.album?.coverArtPath,
+  };
+
+  const album = bundle.album;
+  const track = album.tracks[activeIdx];
+
+  return (
+    <div style={{ padding: 16 }}>
+      {/* TEMP DEBUG (remove after Phase 0) */}
+      <pre style={{ padding: 12, border: "1px solid #ccc", borderRadius: 8 }}>
+        {JSON.stringify(dbg, null, 2)}
+      </pre>
+
+      <div style={{ fontSize: 20, fontWeight: 800 }}>{album.title || "Album"}</div>
+      <div style={{ opacity: 0.8, marginBottom: 12 }}>{album.artist || ""}</div>
+
+      {album.coverArtPath ? (
+        <img
+          src={album.coverArtPath}
+          alt="cover"
+          style={{ width: 240, height: 240, objectFit: "cover", borderRadius: 12 }}
+        />
+      ) : null}
+
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Tracks</div>
+        <ol style={{ paddingLeft: 18 }}>
+          {album.tracks.map((t, i) => (
+            <li key={i} style={{ marginBottom: 6 }}>
+              <button
+                onClick={() => setActiveIdx(i)}
+                style={{
+                  cursor: "pointer",
+                  textDecoration: i === activeIdx ? "underline" : "none",
+                }}
+              >
+                {t.title}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <div style={{ fontWeight: 700 }}>{track.title}</div>
+        <audio
+          controls
+          preload="metadata"
+          src={track.audioPath}
+          style={{ width: "100%", marginTop: 8 }}
+        />
+      </div>
+
+      {/* Buy button wiring happens after Phase 2 */}
+      <div style={{ marginTop: 16 }}>
+        <button disabled style={{ padding: "10px 14px" }}>
+          Buy (next)
+        </button>
+      </div>
+    </div>
+  );
+}
