@@ -59,7 +59,7 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
       });
   }, [backendBase, shareId]);
 
-  // cover signer
+  // cover signer: prefer coverUrl, else sign coverS3Key
   useEffect(() => {
     let alive = true;
 
@@ -103,105 +103,78 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
   }));
 
   const albumTitle = String(manifest.albumTitle || "Album").trim();
-  const artist = String(manifest.artist || "Smart Bridge").trim();
+  const performers = String(manifest.artist || "Smart Bridge").trim();
+  const releaseDateIso = String(manifest.publishedAt || "").trim();
+  const releaseDate = releaseDateIso ? new Date(releaseDateIso).toLocaleDateString() : "—";
+
+  const totalSeconds = tracks.reduce((acc, t) => acc + (Number(t.durationSeconds || 0) || 0), 0);
+  const totalTime = totalSeconds ? fmtTime(totalSeconds) : "—";
 
   return (
     <div style={{ padding: 18 }}>
       <div style={grid}>
-        {/* LEFT (wider) */}
-        <div style={card}>
-          <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.65, textTransform: "uppercase" }}>Product</div>
-
-          <div style={{ marginTop: 10, fontSize: 26, fontWeight: 900 }}>{albumTitle}</div>
-          <div style={{ marginTop: 4, opacity: 0.8 }}>{artist}</div>
-
+        {/* LEFT: COVER ONLY */}
+        <div style={coverCol}>
           {coverUrl ? (
             <img
               src={coverUrl}
               alt="Album cover"
-              style={{
-                marginTop: 14,
-                width: "100%",
-                maxWidth: 520,
-                aspectRatio: "1 / 1",
-                objectFit: "cover",
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.10)",
-              }}
+              style={coverImg}
             />
           ) : (
-            <div
-              style={{
-                marginTop: 14,
-                width: "100%",
-                maxWidth: 520,
-                aspectRatio: "1 / 1",
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(255,255,255,0.06)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                opacity: 0.7,
-                fontWeight: 900,
-              }}
-            >
+            <div style={coverPh}>
               Cover image pending
             </div>
           )}
-
-          <button
-            onClick={() => onBuy?.(shareId)}
-            style={{
-              marginTop: 16,
-              width: "100%",
-              padding: "14px 16px",
-              borderRadius: 14,
-              border: "1px solid rgba(0,0,0,0.35)",
-              background: "#16a34a",
-              color: "white",
-              fontWeight: 900,
-              fontSize: 16,
-              cursor: "pointer",
-            }}
-          >
-            Buy — $18
-          </button>
-
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Album includes</div>
-            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, opacity: 0.9 }}>
-              <li>{tracks.length} songs</li>
-              <li>Authored bridges</li>
-              <li>Two mode playback: Album</li>
-              <li>Smart bridge</li>
-              <li>FREE MP3</li>
-              <li>NFT Mix Album</li>
-              <li>Bonus swag and more</li>
-            </ul>
-          </div>
         </div>
 
-        {/* RIGHT (narrower) */}
+        {/* RIGHT: CARDS */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Card 1: Album meta */}
           <div style={card}>
-            <div style={{ fontWeight: 900 }}>Album</div>
-            <div style={{ marginTop: 6, opacity: 0.8, lineHeight: 1.6 }}>
-              {tracks.length} songs, authored bridges, and two mode playback.
+            <div style={metaLabel}>Album</div>
+            <div style={{ marginTop: 8, fontSize: 26, fontWeight: 900 }}>{albumTitle}</div>
+
+            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "160px 1fr", gap: 8, opacity: 0.92 }}>
+              <div style={k}>Performers</div>
+              <div style={v}>{performers}</div>
+
+              <div style={k}>Release date</div>
+              <div style={v}>{releaseDate}</div>
+
+              <div style={k}>Total time</div>
+              <div style={v}>{totalTime}</div>
             </div>
           </div>
 
+          {/* Card 2: Buy + includes (content moved to right column) */}
           <div style={card}>
-            <div style={{ fontWeight: 900 }}>FREE MP3 + NFT Mix Album</div>
-            <div style={{ marginTop: 6, opacity: 0.8, lineHeight: 1.6 }}>
-              Your purchase includes downloadable MP3 and access to the NFT Mix Album.
+            <button
+              onClick={() => onBuy?.(shareId)}
+              style={buyBtn}
+            >
+              Buy — $18
+            </button>
+
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Album includes</div>
+              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, opacity: 0.95 }}>
+                <li>{tracks.length} songs</li>
+                <li>Authored bridges</li>
+                <li>Two mode playback: Album</li>
+                <li>Smart bridge</li>
+                <li>FREE MP3</li>
+                <li>NFT Mix Album</li>
+                <li>Bonus swag and more</li>
+              </ul>
             </div>
           </div>
 
+          {/* Card 3: (placeholder for future copy) */}
           <div style={card}>
-            <div style={{ fontWeight: 900 }}>Bonus swag</div>
-            <div style={{ marginTop: 6, opacity: 0.8, lineHeight: 1.6 }}>
-              Bonus items and perks may be included depending on the release.
+            <div style={{ fontWeight: 900 }}>Notes</div>
+            <div style={{ marginTop: 6, opacity: 0.85, lineHeight: 1.6 }}>
+              Preview plays 30 seconds per track and auto-continues.
             </div>
           </div>
 
@@ -255,8 +228,38 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "1.25fr 1fr", // left ~25% wider
+  gridTemplateColumns: "1fr 1.05fr",
   gap: 14,
+};
+
+const coverCol = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "center",
+};
+
+const coverImg = {
+  width: "100%",
+  maxWidth: 560,
+  aspectRatio: "1 / 1",
+  objectFit: "cover",
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.06)",
+};
+
+const coverPh = {
+  width: "100%",
+  maxWidth: 560,
+  aspectRatio: "1 / 1",
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.06)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  opacity: 0.7,
+  fontWeight: 900,
 };
 
 const card = {
@@ -264,4 +267,26 @@ const card = {
   border: "1px solid rgba(255,255,255,0.10)",
   borderRadius: 16,
   padding: 16,
+};
+
+const metaLabel = {
+  fontSize: 12,
+  fontWeight: 900,
+  opacity: 0.65,
+  textTransform: "uppercase",
+};
+
+const k = { fontSize: 12, opacity: 0.7, fontWeight: 900, textTransform: "uppercase" };
+const v = { fontSize: 14, fontWeight: 900 };
+
+const buyBtn = {
+  width: "100%",
+  padding: "14px 16px",
+  borderRadius: 14,
+  border: "1px solid rgba(0,0,0,0.35)",
+  background: "#16a34a",
+  color: "white",
+  fontWeight: 900,
+  fontSize: 16,
+  cursor: "pointer",
 };
