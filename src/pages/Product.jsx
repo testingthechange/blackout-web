@@ -29,6 +29,7 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
 
   // durations by s3Key
   const [durByKey, setDurByKey] = useState({}); // { [s3Key]: seconds }
+  const [totalSec, setTotalSec] = useState(0);
 
   useEffect(() => {
     if (!backendBase) {
@@ -119,6 +120,18 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendBase, manifest?.shareId]);
 
+  // total time
+  useEffect(() => {
+    if (!manifest?.ok || !Array.isArray(manifest.tracks)) return;
+    let sum = 0;
+    for (const t of manifest.tracks) {
+      const k = String(t?.s3Key || "").trim();
+      const d = durByKey[k];
+      if (d && Number.isFinite(d)) sum += Number(d);
+    }
+    setTotalSec(sum);
+  }, [manifest, durByKey]);
+
   if (!shareId) return <ErrorPanel title="Missing shareId" details="No shareId in route." />;
   if (status === "missing-env") return <ErrorPanel title="Backend missing" details="Missing VITE_ALBUM_BACKEND_URL." />;
   if (status === "fail") return <ErrorPanel title="Failed to load product" details={String(err?.message || err)} />;
@@ -135,16 +148,30 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
     };
   });
 
-  // --- PAGE-LOCKED LAYOUT (do not rearrange) ---
+  // --- LAYOUT LOCK ---
+  // Left column: cover only.
+  // Right column: Card1 meta, Card2 buy+includes, Card3 tracks (always bottom).
   return (
     <div style={{ padding: 16 }}>
       <div style={grid}>
-        {/* LEFT COLUMN (made ~10% wider) */}
+        {/* LEFT COLUMN: COVER ONLY */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* Card 1: Album meta */}
+          <div style={card}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7, textTransform: "uppercase" }}>Cover</div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ padding: 14, borderRadius: 14, border: "1px dashed rgba(255,255,255,0.18)", opacity: 0.8 }}>
+                Cover image pending
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Card 1: Album meta (TOP of right column) */}
           <div style={card}>
             <div style={{ fontSize: 18, fontWeight: 900 }}>Album</div>
-            <div style={{ marginTop: 10, display: "grid", gap: 8, fontSize: 13, opacity: 0.92 }}>
+            <div style={{ marginTop: 10, display: "grid", gap: 10, fontSize: 13, opacity: 0.92 }}>
               <div>
                 <span style={label}>Album name</span>
                 <div style={value}>—</div>
@@ -159,36 +186,14 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
               </div>
               <div>
                 <span style={label}>Total time</span>
-                <div style={value}>—</div>
+                <div style={value}>{totalSec > 0 ? fmtTime(totalSec) : "—"}</div>
               </div>
             </div>
           </div>
 
-          {/* Card 2: Cover image (left column only) */}
+          {/* Card 2: Buy + includes */}
           <div style={card}>
-            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7, textTransform: "uppercase" }}>Cover</div>
-            <div style={{ marginTop: 10 }}>
-              <div style={{ padding: 14, borderRadius: 14, border: "1px dashed rgba(255,255,255,0.18)", opacity: 0.8 }}>
-                Cover image pending
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: (reserved / keep) */}
-          <div style={{ ...card, opacity: 0.7 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7, textTransform: "uppercase" }}>—</div>
-            <div style={{ marginTop: 8, fontSize: 12 }}>—</div>
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* Buy + includes (right column) */}
-          <div style={card}>
-            <button
-              onClick={() => onBuy?.(shareId)}
-              style={buyBtn}
-            >
+            <button onClick={() => onBuy?.(shareId)} style={buyBtn}>
               Buy — $18
             </button>
 
@@ -204,7 +209,7 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
             </ul>
           </div>
 
-          {/* Tracks card (always bottom in right column) */}
+          {/* Card 3: Tracks (always bottom) */}
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracks</div>
 
@@ -216,7 +221,12 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
               {tracks.map((t, i) => (
                 <button
                   key={t.id}
-                  onClick={() => onPickTrack({ tracks: tracks.map((x) => ({ title: x.title, s3Key: x.s3Key })), index: i })}
+                  onClick={() =>
+                    onPickTrack({
+                      tracks: tracks.map((x) => ({ title: x.title, s3Key: x.s3Key })),
+                      index: i,
+                    })
+                  }
                   style={trackRowBtn}
                 >
                   <span style={{ width: 28, opacity: 0.7 }}>{i + 1}</span>
@@ -233,7 +243,7 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
 
 const grid = {
   display: "grid",
-  // left column widened by ~10% vs a 50/50 baseline
+  // left column only cover, still wider than right by ~10%
   gridTemplateColumns: "1.35fr 1fr",
   gap: 14,
   alignItems: "start",
@@ -260,10 +270,10 @@ const value = {
 
 const buyBtn = {
   width: "100%",
-  padding: "10px 14px", // thinner
+  padding: "10px 14px",
   borderRadius: 14,
-  border: "1px solid rgba(34,197,94,0.65)",
-  background: "rgba(34,197,94,0.38)", // brighter green
+  border: "1px solid rgba(34,197,94,0.70)",
+  background: "rgba(34,197,94,0.42)",
   color: "white",
   fontWeight: 900,
   fontSize: 16,
@@ -278,7 +288,7 @@ const includesList = {
 };
 
 const includesItem = {
-  fontSize: 13, // decreased font size
+  fontSize: 13,
   opacity: 0.92,
   fontWeight: 800,
 };

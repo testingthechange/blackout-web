@@ -47,7 +47,6 @@ export default function App() {
     const next = new URLSearchParams(searchParams);
     if (nextQ) next.set("q", nextQ);
     else next.delete("q");
-    // preserve shareId if present (already in searchParams)
     setSearchParams(next, { replace: true });
   }
 
@@ -61,7 +60,7 @@ export default function App() {
   // show player always on Product page (layout locked requirement)
   const playerVisible = loc.pathname.startsWith("/shop/product");
 
-  // Cache signed urls briefly per s3Key so rapid prev/next feels instant
+  // Cache signed urls briefly per s3Key
   const signedCache = useMemo(() => new Map(), []);
 
   async function signTrackIfNeeded(track) {
@@ -117,35 +116,38 @@ export default function App() {
 
   const playerMode = "preview"; // product page is preview-only right now
 
-  const shopHref = `/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""}`;
-  const accountHref = `/account${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""}`;
+  const shopHref = `/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${
+    qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
+  }`;
+  const accountHref = `/account${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${
+    qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
+  }`;
 
   return (
     <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 120px" }}>
         {/* HEADER: left brand, centered nav, right login + search under it */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "start", gap: 12, marginBottom: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "start", gap: 12 }}>
           <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Block Radius</div>
 
           <div style={{ display: "flex", justifyContent: "center", gap: 18, paddingTop: 2 }}>
-            <Link to="/" style={navLink}>Home</Link>
-            <Link to={shopHref} style={navLink}>Shop</Link>
-            <Link to={accountHref} style={navLink}>Account</Link>
+            <Link to="/" style={navLink}>
+              Home
+            </Link>
+            <Link to={shopHref} style={navLink}>
+              Shop
+            </Link>
+            <Link to={accountHref} style={navLink}>
+              Account
+            </Link>
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <div style={{ width: 320 }}>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, alignItems: "center" }}>
-                <Link to="/login" style={loginLink}>Login</Link>
-                <div style={{ fontSize: 12, opacity: 0.85 }}>
-                  Backend:{" "}
-                  {backendStatus === "ok" && "OK"}
-                  {backendStatus === "fail" && "FAIL"}
-                  {backendStatus === "missing" && "MISSING ENV"}
-                  {backendStatus === "checking" && "…"}
-                  {" · "}
-                  ShareId: {shareId || "—"}
-                </div>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Link to="/login" style={loginLink}>
+                  Login
+                </Link>
               </div>
 
               {/* GLOBAL SEARCH (under login) */}
@@ -163,19 +165,30 @@ export default function App() {
                   placeholder="Search"
                   style={searchInput}
                 />
-                <button type="submit" style={searchBtn}>Search</button>
+                <button type="submit" style={searchBtn}>
+                  Search
+                </button>
               </form>
             </div>
           </div>
         </div>
 
+        {/* STATUS ROW (moved away from Login/Search) */}
+        <div style={statusRow}>
+          <div>
+            Backend:{" "}
+            {backendStatus === "ok" && "OK"}
+            {backendStatus === "fail" && "FAIL"}
+            {backendStatus === "missing" && "MISSING ENV"}
+            {backendStatus === "checking" && "…"}
+          </div>
+          <div>ShareId: {shareId || "—"}</div>
+        </div>
+
         {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route
-            path="/shop"
-            element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
-          />
+          <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />} />
           <Route
             path="/shop/product/:shareId"
             element={
@@ -192,7 +205,7 @@ export default function App() {
         </Routes>
       </div>
 
-      {/* PLAYER: always shown on Product page (even before a track is picked) */}
+      {/* PLAYER: always shown on Product page */}
       {playerVisible ? (
         <BottomPlayer
           mode={playerMode}
@@ -225,6 +238,15 @@ const loginLink = {
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.18)",
   background: "rgba(255,255,255,0.06)",
+};
+
+const statusRow = {
+  marginTop: 10,
+  display: "flex",
+  justifyContent: "center",
+  gap: 16,
+  fontSize: 12,
+  opacity: 0.8,
 };
 
 const searchInput = {
