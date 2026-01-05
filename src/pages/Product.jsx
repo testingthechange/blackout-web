@@ -1,3 +1,4 @@
+// src/pages/Product.jsx
 import { useEffect, useMemo, useState } from "react";
 
 function ErrorPanel({ title, details }) {
@@ -9,8 +10,8 @@ function ErrorPanel({ title, details }) {
   );
 }
 
-function fmtTime(seconds) {
-  const s = Math.max(0, Math.floor(Number(seconds || 0)));
+function fmtTime(sec) {
+  const s = Math.max(0, Math.floor(Number(sec || 0)));
   const m = Math.floor(s / 60);
   const r = String(s % 60).padStart(2, "0");
   return `${m}:${r}`;
@@ -26,7 +27,8 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
   const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState(null);
 
-  const [coverUrl, setCoverUrl] = useState("");
+  // durations by s3Key
+  const [durByKey, setDurByKey] = useState({}); // { [s3Key]: seconds }
 
   useEffect(() => {
     if (!backendBase) {
@@ -59,147 +61,167 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
       });
   }, [backendBase, shareId]);
 
-  // cover signer: prefer coverUrl, else sign coverS3Key
+  // Compute durations (best-effort) after manifest loads.
+  // Uses on-demand signing to avoid expired URLs being stored in the manifest.
   useEffect(() => {
     let alive = true;
+    if (!backendBase) return;
+    if (!manifest?.ok || !Array.isArray(manifest.tracks)) return;
 
-    async function run() {
-      setCoverUrl("");
+    (async () => {
+      for (const t of manifest.tracks) {
+        if (!alive) return;
 
-      if (!backendBase || !manifest?.ok) return;
+        const s3Key = String(t?.s3Key || "").trim();
+        if (!s3Key) continue;
+        if (durByKey[s3Key] != null) continue;
 
-      const direct = String(manifest.coverUrl || "").trim();
-      if (direct) {
-        if (alive) setCoverUrl(direct);
-        return;
+        try {
+          const r = await fetch(`${backendBase}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`, { cache: "no-store" });
+          const j = await r.json().catch(() => null);
+          if (!r.ok || !j?.ok || !j?.url) continue;
+
+          const url = String(j.url || "").trim();
+          if (!url) continue;
+
+          const seconds = await new Promise((resolve, reject) => {
+            const a = new Audio();
+            a.preload = "metadata";
+            a.src = url;
+
+            const cleanup = () => {
+              a.onloadedmetadata = null;
+              a.onerror = null;
+            };
+
+            a.onloadedmetadata = () => {
+              cleanup();
+              const d = Number(a.duration || 0);
+              resolve(d > 0 ? d : 0);
+            };
+            a.onerror = () => {
+              cleanup();
+              reject(new Error("audio metadata error"));
+            };
+          });
+
+          if (!alive) return;
+          setDurByKey((prev) => ({ ...prev, [s3Key]: seconds }));
+        } catch {
+          // ignore
+        }
       }
+    })();
 
-      const s3Key = String(manifest.coverS3Key || "").trim();
-      if (!s3Key) return;
-
-      const r = await fetch(`${backendBase}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`, { cache: "no-store" });
-      const j = await r.json().catch(() => null);
-      if (!j?.ok || !j.url) return;
-
-      if (alive) setCoverUrl(String(j.url));
-    }
-
-    run().catch(() => {});
     return () => {
       alive = false;
     };
-  }, [backendBase, manifest]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendBase, manifest?.shareId]);
 
   if (!shareId) return <ErrorPanel title="Missing shareId" details="No shareId in route." />;
   if (status === "missing-env") return <ErrorPanel title="Backend missing" details="Missing VITE_ALBUM_BACKEND_URL." />;
   if (status === "fail") return <ErrorPanel title="Failed to load product" details={String(err?.message || err)} />;
   if (!manifest) return <div style={{ padding: 16 }}>Loading…</div>;
 
-  const tracks = manifest.tracks.map((t, i) => ({
-    id: `trk-${i}`,
-    title: String(t.title || "").trim(),
-    s3Key: String(t.s3Key || "").trim(),
-    durationSeconds: Number(t.durationSeconds || 0),
-  }));
+  const tracks = manifest.tracks.map((t, i) => {
+    const s3Key = String(t.s3Key || "").trim();
+    const sec = durByKey[s3Key];
+    const suffix = sec ? ` (${fmtTime(sec)})` : "";
+    return {
+      id: `trk-${i}`,
+      title: `${String(t.title || "").trim() || "Untitled"}${suffix}`,
+      s3Key,
+    };
+  });
 
-  const albumTitle = String(manifest.albumTitle || "Album").trim();
-  const performers = String(manifest.artist || "Smart Bridge").trim();
-  const releaseDateIso = String(manifest.publishedAt || "").trim();
-  const releaseDate = releaseDateIso ? new Date(releaseDateIso).toLocaleDateString() : "—";
-
-  const totalSeconds = tracks.reduce((acc, t) => acc + (Number(t.durationSeconds || 0) || 0), 0);
-  const totalTime = totalSeconds ? fmtTime(totalSeconds) : "—";
-
+  // --- PAGE-LOCKED LAYOUT (do not rearrange) ---
   return (
-    <div style={{ padding: 18 }}>
+    <div style={{ padding: 16 }}>
       <div style={grid}>
-        {/* LEFT: COVER ONLY */}
-        <div style={coverCol}>
-          {coverUrl ? (
-            <img src={coverUrl} alt="Album cover" style={coverImg} />
-          ) : (
-            <div style={coverPh}>Cover image pending</div>
-          )}
-        </div>
-
-        {/* RIGHT: CARDS */}
+        {/* LEFT COLUMN (made ~10% wider) */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {/* Card 1: Album meta */}
           <div style={card}>
-            <div style={{ marginTop: 2, fontSize: 26, fontWeight: 900 }}>{albumTitle}</div>
-
-            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "160px 1fr", gap: 8, opacity: 0.92 }}>
-              <div style={k}>Performers</div>
-              <div style={v}>{performers}</div>
-
-              <div style={k}>Release date</div>
-              <div style={v}>{releaseDate}</div>
-
-              <div style={k}>Total time</div>
-              <div style={v}>{totalTime}</div>
+            <div style={{ fontSize: 18, fontWeight: 900 }}>Album</div>
+            <div style={{ marginTop: 10, display: "grid", gap: 8, fontSize: 13, opacity: 0.92 }}>
+              <div>
+                <span style={label}>Album name</span>
+                <div style={value}>—</div>
+              </div>
+              <div>
+                <span style={label}>Performers</span>
+                <div style={value}>—</div>
+              </div>
+              <div>
+                <span style={label}>Release date</span>
+                <div style={value}>—</div>
+              </div>
+              <div>
+                <span style={label}>Total time</span>
+                <div style={value}>—</div>
+              </div>
             </div>
           </div>
 
-          {/* Card 2: Buy + includes */}
+          {/* Card 2: Cover image (left column only) */}
           <div style={card}>
-            <button onClick={() => onBuy?.(shareId)} style={buyBtn}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7, textTransform: "uppercase" }}>Cover</div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ padding: 14, borderRadius: 14, border: "1px dashed rgba(255,255,255,0.18)", opacity: 0.8 }}>
+                Cover image pending
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: (reserved / keep) */}
+          <div style={{ ...card, opacity: 0.7 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.7, textTransform: "uppercase" }}>—</div>
+            <div style={{ marginTop: 8, fontSize: 12 }}>—</div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Buy + includes (right column) */}
+          <div style={card}>
+            <button
+              onClick={() => onBuy?.(shareId)}
+              style={buyBtn}
+            >
               Buy — $18
             </button>
 
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>Album includes</div>
-              <ul style={includesList}>
-                <li>{tracks.length} songs</li>
-                <li>Authored bridges</li>
-                <li>Two mode playback: Album</li>
-                <li>Smart bridge</li>
-                <li>FREE MP3</li>
-                <li>NFT Mix Album</li>
-                <li>Bonus swag and more</li>
-              </ul>
-            </div>
+            <div style={{ marginTop: 14, fontWeight: 900 }}>Album includes</div>
+            <ul style={includesList}>
+              <li style={includesItem}>3 songs</li>
+              <li style={includesItem}>Authored bridges</li>
+              <li style={includesItem}>Two mode playback: Album</li>
+              <li style={includesItem}>Smart bridge</li>
+              <li style={includesItem}>FREE MP3</li>
+              <li style={includesItem}>NFT Mix Album</li>
+              <li style={includesItem}>Bonus swag and more</li>
+            </ul>
           </div>
 
-          {/* TRACKS CARD (always at bottom) */}
-          <div style={{ ...card, marginTop: "auto" }}>
-            <div style={{ fontWeight: 900 }}>Tracks</div>
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+          {/* Tracks card (always bottom in right column) */}
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracks</div>
+
+            <div style={{ fontSize: 12, opacity: 0.78, marginBottom: 10 }}>
               Click a song title to play a 30-second preview.
             </div>
 
-            <div style={{ marginTop: 10 }}>
+            <div>
               {tracks.map((t, i) => (
-                <div
+                <button
                   key={t.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "10px 0",
-                    borderTop: i === 0 ? "1px solid rgba(255,255,255,0.10)" : "1px solid rgba(255,255,255,0.06)",
-                  }}
+                  onClick={() => onPickTrack({ tracks: tracks.map((x) => ({ title: x.title, s3Key: x.s3Key })), index: i })}
+                  style={trackRowBtn}
                 >
-                  <div style={{ width: 24, opacity: 0.65, fontWeight: 900 }}>{i + 1}</div>
-
-                  <button
-                    onClick={() => onPickTrack({ tracks, index: i })}
-                    style={{
-                      flex: 1,
-                      textAlign: "left",
-                      background: "transparent",
-                      border: "none",
-                      color: "white",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                      padding: 0,
-                    }}
-                    title="Play preview"
-                  >
-                    <span style={{ color: "#22c55e", fontWeight: 900, marginRight: 8 }}>▶</span>
-                    {t.title || "Untitled"}{" "}
-                    {t.durationSeconds ? <span style={{ opacity: 0.7 }}>({fmtTime(t.durationSeconds)})</span> : null}
-                  </button>
-                </div>
+                  <span style={{ width: 28, opacity: 0.7 }}>{i + 1}</span>
+                  <span style={{ flex: 1, fontWeight: 900, textAlign: "left" }}>{t.title}</span>
+                </button>
               ))}
             </div>
           </div>
@@ -211,56 +233,37 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "1fr 1.05fr",
+  // left column widened by ~10% vs a 50/50 baseline
+  gridTemplateColumns: "1.35fr 1fr",
   gap: 14,
-};
-
-const coverCol = {
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "center",
-};
-
-const coverImg = {
-  width: "100%",
-  maxWidth: 560,
-  aspectRatio: "1 / 1",
-  objectFit: "cover",
-  borderRadius: 16,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(255,255,255,0.06)",
-};
-
-const coverPh = {
-  width: "100%",
-  maxWidth: 560,
-  aspectRatio: "1 / 1",
-  borderRadius: 16,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(255,255,255,0.06)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  opacity: 0.7,
-  fontWeight: 900,
+  alignItems: "start",
 };
 
 const card = {
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.12)",
   borderRadius: 16,
-  padding: 16,
+  padding: 14,
 };
 
-const k = { fontSize: 12, opacity: 0.7, fontWeight: 900, textTransform: "uppercase" };
-const v = { fontSize: 14, fontWeight: 900 };
+const label = {
+  fontSize: 12,
+  fontWeight: 900,
+  opacity: 0.7,
+  textTransform: "uppercase",
+};
+
+const value = {
+  marginTop: 4,
+  fontWeight: 900,
+};
 
 const buyBtn = {
   width: "100%",
-  padding: "10px 16px",
+  padding: "10px 14px", // thinner
   borderRadius: 14,
-  border: "1px solid rgba(0,0,0,0.35)",
-  background: "#22c55e",
+  border: "1px solid rgba(34,197,94,0.65)",
+  background: "rgba(34,197,94,0.38)", // brighter green
   color: "white",
   fontWeight: 900,
   fontSize: 16,
@@ -268,9 +271,28 @@ const buyBtn = {
 };
 
 const includesList = {
-  margin: 0,
+  margin: "10px 0 0",
   paddingLeft: 18,
-  lineHeight: 1.7,
-  opacity: 0.95,
-  fontSize: 13,
+  display: "grid",
+  gap: 6,
+};
+
+const includesItem = {
+  fontSize: 13, // decreased font size
+  opacity: 0.92,
+  fontWeight: 800,
+};
+
+const trackRowBtn = {
+  width: "100%",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "10px 10px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.05)",
+  color: "white",
+  cursor: "pointer",
+  marginBottom: 10,
 };
