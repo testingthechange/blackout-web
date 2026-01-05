@@ -116,15 +116,9 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
         {/* LEFT: COVER ONLY */}
         <div style={coverCol}>
           {coverUrl ? (
-            <img
-              src={coverUrl}
-              alt="Album cover"
-              style={coverImg}
-            />
+            <img src={coverUrl} alt="Album cover" style={coverImg} />
           ) : (
-            <div style={coverPh}>
-              Cover image pending
-            </div>
+            <div style={coverPh}>Cover image pending</div>
           )}
         </div>
 
@@ -147,18 +141,15 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
             </div>
           </div>
 
-          {/* Card 2: Buy + includes (content moved to right column) */}
+          {/* Card 2: Buy + includes */}
           <div style={card}>
-            <button
-              onClick={() => onBuy?.(shareId)}
-              style={buyBtn}
-            >
+            <button onClick={() => onBuy?.(shareId)} style={buyBtn}>
               Buy — $18
             </button>
 
-            <div style={{ marginTop: 14 }}>
+            <div style={{ marginTop: 12 }}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Album includes</div>
-              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7, opacity: 0.95 }}>
+              <ul style={includesList}>
                 <li>{tracks.length} songs</li>
                 <li>Authored bridges</li>
                 <li>Two mode playback: Album</li>
@@ -167,14 +158,6 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
                 <li>NFT Mix Album</li>
                 <li>Bonus swag and more</li>
               </ul>
-            </div>
-          </div>
-
-          {/* Card 3: (placeholder for future copy) */}
-          <div style={card}>
-            <div style={{ fontWeight: 900 }}>Notes</div>
-            <div style={{ marginTop: 6, opacity: 0.85, lineHeight: 1.6 }}>
-              Preview plays 30 seconds per track and auto-continues.
             </div>
           </div>
 
@@ -281,12 +264,20 @@ const v = { fontSize: 14, fontWeight: 900 };
 
 const buyBtn = {
   width: "100%",
-  padding: "14px 16px",
+  padding: "10px 16px", // ~30% thinner than 14px
   borderRadius: 14,
   border: "1px solid rgba(0,0,0,0.35)",
-  background: "#16a34a",
+  background: "#22c55e", // brighter green
   color: "white",
   fontWeight: 900,
   fontSize: 16,
   cursor: "pointer",
+};
+
+const includesList = {
+  margin: 0,
+  paddingLeft: 18,
+  lineHeight: 1.7,
+  opacity: 0.95,
+  fontSize: 13, // decreased font size
 };
