@@ -1,5 +1,6 @@
+// src/App.jsx
 import { Routes, Route, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Home from "./pages/Home.jsx";
 import Shop from "./pages/Shop.jsx";
@@ -10,14 +11,18 @@ import Login from "./pages/Login.jsx";
 
 import BottomPlayer from "./components/BottomPlayer.jsx";
 
-// 🔒 SINGLE SOURCE OF TRUTH
-const BACKEND_BASE = (import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
+// ✅ Single source of truth (with backward-compatible alias)
+const ENV_API =
+  (import.meta.env.VITE_API_BASE || import.meta.env.VITE_ALBUM_BACKEND_URL || "").toString().trim();
+
+const BACKEND_BASE = ENV_API.replace(/\/+$/, "");
 
 export default function App() {
   const loc = useLocation();
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
 
+  // optional shareId via querystring on /shop or /account
   const shareId = String(searchParams.get("shareId") || "").trim();
 
   // ---------- BACKEND STATUS ----------
@@ -40,17 +45,23 @@ export default function App() {
 
   const activeTrack = queue[idx] || null;
 
+  // show player on these pages
   const playerVisible =
     loc.pathname.startsWith("/shop") ||
     loc.pathname.startsWith("/account") ||
     loc.pathname.startsWith("/sold");
 
+  // Full player on site pages
+  const playerMode = "full";
+
   const setPlayContext = ({ tracks, index }) => {
     if (!Array.isArray(tracks) || !tracks.length) return;
     setQueue(tracks);
-    setIdx(Math.max(0, index || 0));
+    setIdx(Math.max(0, Number(index || 0)));
     setIsPlaying(true);
   };
+
+  const canPrevNext = queue.length > 1;
 
   return (
     <div style={{ minHeight: "100vh", background: "#0b0c10", color: "white" }}>
@@ -64,6 +75,10 @@ export default function App() {
             {backendStatus === "fail" && "FAIL"}
             {backendStatus === "missing" && "MISSING ENV"}
             {backendStatus === "checking" && "…"}
+            {" "}
+            <span style={{ opacity: 0.7 }}>
+              {BACKEND_BASE ? `(${BACKEND_BASE})` : ""}
+            </span>
           </div>
         </div>
 
@@ -77,6 +92,7 @@ export default function App() {
         {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
+
           <Route
             path="/shop"
             element={
@@ -87,16 +103,19 @@ export default function App() {
               />
             }
           />
+
+          {/* ✅ FIX: Product route is /shop/product/:shareId */}
           <Route
-            path="/shop/:productId"
+            path="/shop/product/:shareId"
             element={
               <Product
                 backendBase={BACKEND_BASE}
                 onPickTrack={(ctx) => setPlayContext(ctx)}
-                onBuy={(id) => nav(`/sold?productId=${id}`)}
+                onBuy={(id) => nav(`/sold?productId=${encodeURIComponent(id)}`)}
               />
             }
           />
+
           <Route path="/account" element={<MyAccount backendBase={BACKEND_BASE} />} />
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
@@ -105,13 +124,20 @@ export default function App() {
 
       {playerVisible && activeTrack ? (
         <BottomPlayer
+          mode={playerMode}
           track={activeTrack}
           queue={queue}
           index={idx}
           isPlaying={isPlaying}
           onPlayPause={setIsPlaying}
-          onPrev={() => setIdx((i) => (i > 0 ? i - 1 : queue.length - 1))}
-          onNext={() => setIdx((i) => (i + 1) % queue.length)}
+          onPrev={() => {
+            if (!canPrevNext) return;
+            setIdx((i) => (i > 0 ? i - 1 : queue.length - 1));
+          }}
+          onNext={() => {
+            if (!canPrevNext) return;
+            setIdx((i) => (i + 1) % queue.length);
+          }}
           previewSeconds={30}
         />
       ) : null}

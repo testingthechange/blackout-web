@@ -1,13 +1,6 @@
 // src/pages/Product.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { loadAlbumBundleByShareId } from "../data/published/loadAlbumBundleByShareId.jsx";
-
-// Minimal fetchJson that hits your server route (recommended) or direct storage if allowed.
-async function fetchJson(path) {
-  const res = await fetch(path, { credentials: "include" });
-  if (!res.ok) throw new Error(`fetchJson failed: ${res.status} ${path}`);
-  return await res.json();
-}
+import { useParams } from "react-router-dom";
 
 function ErrorPanel({ title, details }) {
   return (
@@ -18,114 +11,141 @@ function ErrorPanel({ title, details }) {
   );
 }
 
-export default function Product() {
-  // Expected route: /shop/product/:shareId
-  const shareId = useMemo(() => {
-    const m = window.location.pathname.match(/\/shop\/product\/([^/]+)/);
-    return m?.[1] || null;
-  }, []);
+async function fetchManifest({ backendBase, shareId }) {
+  const url = `${backendBase}/api/publish/${encodeURIComponent(shareId)}/manifest`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Manifest fetch failed: ${res.status}`);
+  const j = await res.json();
+  if (!j?.ok || !Array.isArray(j.tracks)) throw new Error("Manifest invalid");
+  return j;
+}
 
-  const [bundle, setBundle] = useState(null);
-  const [err, setErr] = useState(null);
-  const [activeIdx, setActiveIdx] = useState(0);
+export default function Product({ backendBase, onPickTrack, onBuy }) {
+  const params = useParams();
+  const shareId = useMemo(() => String(params.shareId || "").trim(), [params.shareId]);
+
+  const [status, setStatus] = useState("idle");
+  const [manifest, setManifest] = useState(null);
+  const [err, setErr] = useState("");
 
   useEffect(() => {
     let alive = true;
+
     (async () => {
+      setErr("");
+      setManifest(null);
+
+      if (!backendBase) {
+        setStatus("missing-env");
+        return;
+      }
+      if (!shareId) {
+        setStatus("missing-shareid");
+        return;
+      }
+
+      setStatus("loading");
       try {
-        setErr(null);
-        const b = await loadAlbumBundleByShareId({ shareId, fetchJson });
+        const j = await fetchManifest({ backendBase, shareId });
         if (!alive) return;
-        setBundle(b);
+        setManifest(j);
+        setStatus("ok");
       } catch (e) {
         if (!alive) return;
-        setErr(e);
+        setErr(String(e?.message || e));
+        setStatus("fail");
       }
     })();
+
     return () => {
       alive = false;
     };
-  }, [shareId]);
+  }, [backendBase, shareId]);
+
+  if (!backendBase) {
+    return <ErrorPanel title="Missing backend env" details="Set VITE_API_BASE in blackout-web Render env." />;
+  }
 
   if (!shareId) {
-    return <ErrorPanel title="Missing shareId" details="No shareId in route." />;
+    return <ErrorPanel title="Missing shareId" details="Route should be /shop/product/:shareId" />;
   }
 
-  if (err) {
-    return (
-      <ErrorPanel
-        title="Product failed to load published album bundle"
-        details={String(err?.message || err)}
-      />
-    );
+  if (status === "loading") return <div style={{ padding: 16 }}>Loading…</div>;
+
+  if (status === "fail") {
+    return <ErrorPanel title="Product failed to load published manifest" details={err || "Unknown error"} />;
   }
 
-  if (!bundle) return <div style={{ padding: 16 }}>Loading…</div>;
+  if (!manifest?.ok) {
+    return <ErrorPanel title="Manifest not available" details={`Status: ${status}`} />;
+  }
 
-  // TEMP DEBUG (remove after Phase 0)
-  const dbg = {
-    projectId: bundle?.lineage?.projectId,
-    masterSavePath: bundle?.lineage?.masterSavePath,
-    trackCount: bundle?.album?.tracks?.length,
-    firstTrack: bundle?.album?.tracks?.[0]?.title,
-    firstAudioPath: bundle?.album?.tracks?.[0]?.audioPath,
-    coverArtPath: bundle?.album?.coverArtPath,
-  };
+  const tracks = manifest.tracks.map((t, i) => ({
+    id: `pub-${manifest.shareId}-${i}`,
+    title: String(t.title || `Track ${i + 1}`),
+    url: String(t.url || ""),
+    s3Key: String(t.s3Key || ""),
+    slot: t.slot,
+  }));
 
-  const album = bundle.album;
-  const track = album.tracks[activeIdx];
+  const albumTitle = "Published Album";
+  const artist = "Smart Bridge";
 
   return (
     <div style={{ padding: 16 }}>
-      {/* TEMP DEBUG (remove after Phase 0) */}
-      <pre style={{ padding: 12, border: "1px solid #ccc", borderRadius: 8 }}>
-        {JSON.stringify(dbg, null, 2)}
-      </pre>
+      <div style={{ fontSize: 20, fontWeight: 800 }}>{albumTitle}</div>
+      <div style={{ opacity: 0.8, marginBottom: 12 }}>{artist}</div>
 
-      <div style={{ fontSize: 20, fontWeight: 800 }}>{album.title || "Album"}</div>
-      <div style={{ opacity: 0.8, marginBottom: 12 }}>{album.artist || ""}</div>
+      <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 10 }}>
+        ShareId: <code>{manifest.shareId}</code> · ProjectId: <code>{manifest.projectId}</code> · Tracks:{" "}
+        <code>{tracks.length}</code>
+      </div>
 
-      {album.coverArtPath ? (
-        <img
-          src={album.coverArtPath}
-          alt="cover"
-          style={{ width: 240, height: 240, objectFit: "cover", borderRadius: 12 }}
-        />
-      ) : null}
+      <div style={{ marginTop: 10 }}>
+        <button
+          onClick={() => onPickTrack?.({ tracks, index: 0 })}
+          style={{ padding: "10px 14px", fontWeight: 900, cursor: "pointer" }}
+        >
+          Play Album
+        </button>
+      </div>
 
       <div style={{ marginTop: 16 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Tracks</div>
-        <ol style={{ paddingLeft: 18 }}>
-          {album.tracks.map((t, i) => (
-            <li key={i} style={{ marginBottom: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {tracks.map((t, i) => (
+            <div
+              key={t.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 12,
+                padding: 12,
+              }}
+            >
+              <div style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {i + 1}. {t.title}
+              </div>
               <button
-                onClick={() => setActiveIdx(i)}
-                style={{
-                  cursor: "pointer",
-                  textDecoration: i === activeIdx ? "underline" : "none",
-                }}
+                onClick={() => onPickTrack?.({ tracks, index: i })}
+                style={{ padding: "8px 12px", fontWeight: 900, cursor: "pointer" }}
               >
-                {t.title}
+                Play
               </button>
-            </li>
+            </div>
           ))}
-        </ol>
+        </div>
       </div>
 
-      <div style={{ marginTop: 12 }}>
-        <div style={{ fontWeight: 700 }}>{track.title}</div>
-        <audio
-          controls
-          preload="metadata"
-          src={track.audioPath}
-          style={{ width: "100%", marginTop: 8 }}
-        />
-      </div>
-
-      {/* Buy button wiring happens after Phase 2 */}
       <div style={{ marginTop: 16 }}>
-        <button disabled style={{ padding: "10px 14px" }}>
-          Buy (next)
+        <button
+          onClick={() => onBuy?.(manifest.shareId)}
+          style={{ padding: "10px 14px", fontWeight: 900, cursor: "pointer" }}
+        >
+          Buy
         </button>
       </div>
     </div>
