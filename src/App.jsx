@@ -19,12 +19,25 @@ async function fetchJson(url) {
   return await r.json();
 }
 
+function getShareIdFromPath(pathname) {
+  const m = String(pathname || "").match(/\/shop\/product\/([^/?#]+)/);
+  return m?.[1] ? decodeURIComponent(m[1]) : "";
+}
+
 export default function App() {
   const loc = useLocation();
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const shareId = String(searchParams.get("shareId") || "").trim();
+  // ShareId can come from:
+  // - query string (?shareId=...)
+  // - product route (/shop/product/:shareId)
+  const shareId = useMemo(() => {
+    const q = String(searchParams.get("shareId") || "").trim();
+    if (q) return q;
+    const p = String(getShareIdFromPath(loc.pathname) || "").trim();
+    return p;
+  }, [searchParams, loc.pathname]);
 
   // ---------- BACKEND STATUS ----------
   const [backendStatus, setBackendStatus] = useState("checking");
@@ -39,6 +52,9 @@ export default function App() {
       .catch(() => setBackendStatus("fail"));
   }, []);
 
+  // ---------- GLOBAL SEARCH (placeholder) ----------
+  const [searchText, setSearchText] = useState("");
+
   // ---------- PLAYER STATE ----------
   const [queue, setQueue] = useState([]); // each track: { title, s3Key, url? }
   const [idx, setIdx] = useState(0);
@@ -46,10 +62,7 @@ export default function App() {
 
   const activeTrack = queue[idx] || null;
 
-  const playerVisible =
-    loc.pathname.startsWith("/shop") ||
-    loc.pathname.startsWith("/account") ||
-    loc.pathname.startsWith("/sold");
+  const playerVisible = loc.pathname.startsWith("/shop") || loc.pathname.startsWith("/account") || loc.pathname.startsWith("/sold");
 
   // Cache signed urls briefly per s3Key so rapid prev/next feels instant
   const signedCache = useMemo(() => new Map(), []);
@@ -116,28 +129,143 @@ export default function App() {
     return "preview";
   }, [loc.pathname]);
 
-  return (
-    <div style={{ minHeight: "100vh", background: "#0b0c10", color: "white" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "16px 18px 120px" }}>
-        {/* HEADER */}
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ fontWeight: 900 }}>Block Radius</div>
-          <div style={{ fontSize: 12 }}>
-            Backend:{" "}
-            {backendStatus === "ok" && "OK"}
-            {backendStatus === "fail" && "FAIL"}
-            {backendStatus === "missing" && "MISSING ENV"}
-            {backendStatus === "checking" && "…"}
-            {" · "}
-            ShareId: {shareId || "—"}
-          </div>
-        </div>
+  // ---------- STYLES ----------
+  const pageBg = "#14171c"; // dark grey (not black)
 
-        {/* NAV */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-          <Link to="/">Home</Link>
-          <Link to={`/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}`}>Shop</Link>
-          <Link to={`/account${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}`}>Account</Link>
+  const shell = {
+    minHeight: "100vh",
+    background: pageBg,
+    color: "white",
+  };
+
+  const content = {
+    maxWidth: 1200,
+    margin: "0 auto",
+    padding: "16px 18px 120px",
+  };
+
+  const headerRow = {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    alignItems: "start",
+    gap: 12,
+    marginBottom: 14,
+  };
+
+  const brandLeft = { fontWeight: 900 };
+
+  const navCenter = {
+    display: "flex",
+    justifyContent: "center",
+    gap: 14,
+  };
+
+  const navLink = {
+    color: "white",
+    textDecoration: "none",
+    fontWeight: 900,
+    opacity: 0.9,
+  };
+
+  const rightCol = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 10,
+  };
+
+  const loginBtn = {
+    padding: "8px 10px",
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.08)",
+    color: "white",
+    fontWeight: 900,
+    cursor: "pointer",
+    textDecoration: "none",
+  };
+
+  const searchWrap = {
+    width: 260,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  };
+
+  const searchInput = {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.16)",
+    background: "rgba(0,0,0,0.20)",
+    color: "white",
+    outline: "none",
+    fontWeight: 800,
+  };
+
+  const metaRight = {
+    fontSize: 12,
+    opacity: 0.85,
+    textAlign: "right",
+    lineHeight: 1.25,
+  };
+
+  return (
+    <div style={shell}>
+      <div style={content}>
+        {/* HEADER */}
+        <div style={headerRow}>
+          {/* LEFT */}
+          <div style={brandLeft}>Block Radius</div>
+
+          {/* CENTER NAV (centered in page) */}
+          <div style={navCenter}>
+            <Link
+              to="/"
+              style={navLink}
+            >
+              Home
+            </Link>
+
+            <Link
+              to={`/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}`}
+              style={navLink}
+            >
+              Shop
+            </Link>
+
+            <Link
+              to={`/account${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}`}
+              style={navLink}
+            >
+              Account
+            </Link>
+          </div>
+
+          {/* RIGHT: login placeholder + global search underneath */}
+          <div style={rightCol}>
+            <Link to="/login" style={loginBtn}>
+              Login
+            </Link>
+
+            <div style={searchWrap}>
+              <input
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Search (placeholder)"
+                style={searchInput}
+              />
+              <div style={metaRight}>
+                Backend:{" "}
+                {backendStatus === "ok" && "OK"}
+                {backendStatus === "fail" && "FAIL"}
+                {backendStatus === "missing" && "MISSING ENV"}
+                {backendStatus === "checking" && "…"}
+                {" · "}
+                ShareId: {shareId || "—"}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* ROUTES */}
