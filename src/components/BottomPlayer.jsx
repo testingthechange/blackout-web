@@ -1,3 +1,4 @@
+// src/components/BottomPlayer.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function BottomPlayer({
@@ -26,11 +27,9 @@ export default function BottomPlayer({
 
   const src = useMemo(() => {
     if (!track) return "";
-    // We accept either previewUrl or url
     return String(track.previewUrl || track.url || "").trim();
   }, [track]);
 
-  // Reset when track changes
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -54,7 +53,6 @@ export default function BottomPlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
-  // Play/pause external control
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -63,7 +61,6 @@ export default function BottomPlayer({
     else el.pause();
   }, [isPlaying, src]);
 
-  // Preview limiter (shop mode)
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -86,7 +83,6 @@ export default function BottomPlayer({
     return () => el.removeEventListener("timeupdate", onTime);
   }, [mode, previewSeconds, onPlayPause]);
 
-  // Full mode scrub
   const [dur, setDur] = useState(0);
   const [cur, setCur] = useState(0);
   const [userSeeking, setUserSeeking] = useState(false);
@@ -106,7 +102,6 @@ export default function BottomPlayer({
         onPlayPause(false);
         return;
       }
-      // full mode: repeat or advance
       if (repeat) {
         el.currentTime = 0;
         el.play().catch(() => {});
@@ -138,7 +133,6 @@ export default function BottomPlayer({
   return (
     <div style={wrap}>
       <div style={inner}>
-        {/* LEFT: play/pause */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={() => onPlayPause(!isPlaying)} style={playBtn} aria-label="Play pause">
             {isPlaying ? "❚❚" : "▶"}
@@ -156,7 +150,6 @@ export default function BottomPlayer({
           </div>
         </div>
 
-        {/* MIDDLE: scrub in full mode */}
         <div style={{ flex: 1, minWidth: 0 }}>
           {mode === "full" ? (
             <input
@@ -181,7 +174,6 @@ export default function BottomPlayer({
           )}
         </div>
 
-        {/* RIGHT: shuffle/repeat then prev/next far right */}
         <div style={rightControls}>
           {mode === "full" ? (
             <>

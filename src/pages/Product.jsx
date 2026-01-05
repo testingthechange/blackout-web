@@ -1,24 +1,31 @@
 // src/pages/Product.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import BottomPlayer from "../components/BottomPlayer.jsx";
 
-function ErrorPanel({ title, details }) {
-  return (
-    <div style={{ padding: 16, border: "1px solid #f00", borderRadius: 8 }}>
-      <div style={{ fontWeight: 900, marginBottom: 8 }}>{title}</div>
-      <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{details}</pre>
-    </div>
-  );
+function safeStr(v) {
+  return String(v ?? "").trim();
 }
 
-export default function Product({ backendBase, onPickTrack }) {
+async function fetchJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return await r.json();
+}
+
+export default function Product({ backendBase, onBuy }) {
   const params = useParams();
-  const shareId = String(params.shareId || "").trim();
+  const shareId = safeStr(params.shareId);
 
-  const [status, setStatus] = useState("loading");
+  const [status, setStatus] = useState("idle");
   const [manifest, setManifest] = useState(null);
-  const [err, setErr] = useState(null);
 
+  // player state (Product = preview)
+  const [queue, setQueue] = useState([]);
+  const [idx, setIdx] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // load manifest (published artifact)
   useEffect(() => {
     if (!backendBase) {
       setStatus("missing-env");
@@ -32,106 +39,155 @@ export default function Product({ backendBase, onPickTrack }) {
     }
 
     setStatus("loading");
-    setErr(null);
-
-    fetch(`${backendBase}/api/publish/${shareId}/manifest`, { cache: "no-store" })
-      .then(async (r) => {
-        const j = await r.json().catch(() => null);
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        if (!j?.ok || !Array.isArray(j.tracks)) throw new Error("Bad manifest payload");
-        return j;
-      })
+    fetch(`${backendBase}/api/publish/${encodeURIComponent(shareId)}/manifest`, { cache: "no-store" })
+      .then((r) => r.json())
       .then((j) => {
+        if (!j?.ok || !Array.isArray(j.tracks)) throw new Error("bad manifest");
         setManifest(j);
         setStatus("ok");
       })
-      .catch((e) => {
-        setErr(e);
+      .catch(() => {
         setManifest(null);
         setStatus("fail");
       });
   }, [backendBase, shareId]);
 
-  const tracks = useMemo(() => {
-    if (!manifest?.ok) return [];
-    return (manifest.tracks || []).map((t, i) => ({
-      id: `pub-${i}`,
-      title: t.title || `Track ${i + 1}`,
-      url: t.url, // BottomPlayer reads track.url
-    }));
-  }, [manifest]);
+  // build queue as (title + s3Key). DO NOT trust cached URLs (they expire).
+  useEffect(() => {
+    if (!manifest?.ok) {
+      setQueue([]);
+      setIdx(0);
+      setIsPlaying(false);
+      return;
+    }
 
-  if (status === "missing-env") {
-    return <ErrorPanel title="Backend missing env" details="Set VITE_ALBUM_BACKEND_URL in Render for blackout-web." />;
-  }
-  if (status === "missing-shareid") {
-    return <ErrorPanel title="Missing shareId" details="Expected route: /shop/product/:shareId" />;
-  }
-  if (status === "fail") {
-    return <ErrorPanel title="Manifest load failed" details={String(err?.message || err)} />;
-  }
-  if (!manifest) return <div style={{ padding: 16 }}>Loading…</div>;
+    const tracks = (manifest.tracks || []).map((t, i) => ({
+      id: `pub-${shareId}-${i}`,
+      title: safeStr(t?.title) || `Track ${i + 1}`,
+      s3Key: safeStr(t?.s3Key),
+      url: "", // filled on-demand via /api/playback-url
+    }));
+
+    setQueue(tracks);
+    setIdx(0);
+    setIsPlaying(false);
+  }, [manifest, shareId]);
+
+  // ensure the active track has a fresh URL before attempting playback
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (!backendBase) return;
+      const t = queue[idx];
+      if (!t) return;
+      if (!t.s3Key) return;
+
+      // already have a URL → keep it
+      if (t.url) return;
+
+      try {
+        const playback = await fetchJson(
+          `${backendBase}/api/playback-url?s3Key=${encodeURIComponent(t.s3Key)}`
+        );
+
+        const url = safeStr(playback?.url);
+        if (!url) throw new Error("missing playback url");
+
+        if (!alive) return;
+        setQueue((prev) =>
+          (prev || []).map((x, i) => (i === idx ? { ...x, url } : x))
+        );
+      } catch {
+        // If we can't get a fresh URL, stop playback
+        if (!alive) return;
+        setIsPlaying(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [backendBase, queue, idx]);
+
+  const activeTrack = queue[idx] || null;
+
+  const canBuy = status === "ok" && !!shareId;
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ fontSize: 22, fontWeight: 900 }}>Product</div>
-      <div style={{ opacity: 0.75, marginTop: 4 }}>
-        ShareId: <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{shareId}</span> · Tracks:{" "}
-        <span style={{ fontWeight: 900 }}>{tracks.length}</span>
+    <div style={{ paddingBottom: 120 }}>
+      <h1 style={{ margin: 0 }}>Product</h1>
+
+      <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
+        Publish: {status.toUpperCase()} · ShareId:{" "}
+        <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{shareId || "—"}</span>
       </div>
 
-      <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
-        <button
-          onClick={() => onPickTrack?.({ tracks, index: 0 })}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "rgba(255,255,255,0.10)",
-            color: "white",
-            fontWeight: 900,
-            cursor: "pointer",
-          }}
-        >
-          Play Album
-        </button>
-      </div>
+      {status === "fail" ? <div style={{ marginTop: 14 }}>Failed to load manifest.</div> : null}
+      {status === "missing-env" ? <div style={{ marginTop: 14 }}>Missing VITE_ALBUM_BACKEND_URL.</div> : null}
 
-      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-        {tracks.map((t, i) => (
-          <div
-            key={t.id}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.04)",
-            }}
-          >
-            <div style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {i + 1}. {t.title}
-            </div>
+      {status === "ok" ? (
+        <div style={{ marginTop: 16, padding: 14, border: "1px solid rgba(255,255,255,0.16)", borderRadius: 14 }}>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>Tracks</div>
 
+          <ol style={{ paddingLeft: 18, margin: 0 }}>
+            {queue.map((t, i) => (
+              <li key={t.id} style={{ marginBottom: 6 }}>
+                <button
+                  onClick={() => {
+                    setIdx(i);
+                    setIsPlaying(true);
+                  }}
+                  style={{
+                    cursor: "pointer",
+                    background: "transparent",
+                    color: "white",
+                    border: "none",
+                    padding: 0,
+                    fontWeight: i === idx ? 900 : 700,
+                    textDecoration: i === idx ? "underline" : "none",
+                  }}
+                >
+                  {t.title}
+                </button>
+              </li>
+            ))}
+          </ol>
+
+          <div style={{ marginTop: 14 }}>
             <button
-              onClick={() => onPickTrack?.({ tracks, index: i })}
+              disabled={!canBuy}
+              onClick={() => onBuy?.(shareId)}
               style={{
-                padding: "8px 10px",
+                padding: "10px 14px",
                 borderRadius: 12,
                 border: "1px solid rgba(255,255,255,0.18)",
-                background: "rgba(255,255,255,0.10)",
+                background: canBuy ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
                 color: "white",
                 fontWeight: 900,
-                cursor: "pointer",
+                cursor: canBuy ? "pointer" : "not-allowed",
               }}
             >
-              Play
+              Buy (next)
             </button>
           </div>
-        ))}
-      </div>
+        </div>
+      ) : null}
+
+      {/* Product owns playback (preview only) */}
+      {activeTrack ? (
+        <BottomPlayer
+          mode="preview"
+          track={activeTrack}
+          queue={queue}
+          index={idx}
+          isPlaying={isPlaying}
+          onPlayPause={setIsPlaying}
+          onPrev={() => setIdx((i) => (i > 0 ? i - 1 : queue.length - 1))}
+          onNext={() => setIdx((i) => (i + 1) % queue.length)}
+          previewSeconds={30}
+        />
+      ) : null}
     </div>
   );
 }
