@@ -22,14 +22,13 @@ export default function BottomPlayer({
   const audioRef = useRef(null);
   const [secondsLeft, setSecondsLeft] = useState(previewSeconds);
 
-  const title = useMemo(() => (track ? track.title || "Untitled" : "Select a track"), [track]);
+  const title = useMemo(() => (track ? track.title || "Untitled" : "No track selected"), [track]);
 
   const src = useMemo(() => {
     if (!track) return "";
     return String(track.previewUrl || track.url || "").trim();
   }, [track]);
 
-  // Reset when track changes
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -47,13 +46,10 @@ export default function BottomPlayer({
     el.currentTime = 0;
     el.load();
 
-    if (isPlaying) {
-      el.play().catch(() => {});
-    }
+    if (isPlaying) el.play().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
-  // Play/pause external control
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -62,36 +58,29 @@ export default function BottomPlayer({
     else el.pause();
   }, [isPlaying, src]);
 
-  // Preview limiter (shop/product mode): auto-advance on timeout
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
 
     const onTime = () => {
       if (mode !== "preview") return;
-      if (!src) return;
 
       const t = el.currentTime || 0;
       const remaining = Math.max(0, Math.ceil(previewSeconds - t));
       setSecondsLeft(remaining);
 
       if (t >= previewSeconds) {
-        // move forward in the queue, keep playing
-        if (typeof onNext === "function" && Array.isArray(queue) && queue.length > 1) {
-          onNext();
-        } else {
-          el.pause();
-          el.currentTime = 0;
-          onPlayPause(false);
-        }
+        el.pause();
+        el.currentTime = 0;
+        onPlayPause(false);
+        onNext?.(); // auto-continue after sample
       }
     };
 
     el.addEventListener("timeupdate", onTime);
     return () => el.removeEventListener("timeupdate", onTime);
-  }, [mode, previewSeconds, onPlayPause, onNext, src, queue]);
+  }, [mode, previewSeconds, onPlayPause, onNext]);
 
-  // Full mode scrub
   const [dur, setDur] = useState(0);
   const [cur, setCur] = useState(0);
   const [userSeeking, setUserSeeking] = useState(false);
@@ -107,11 +96,7 @@ export default function BottomPlayer({
     };
 
     const onEnded = () => {
-      if (mode === "preview") {
-        // preview mode end is controlled by limiter, but keep safe:
-        onPlayPause(false);
-        return;
-      }
+      if (mode === "preview") return;
       if (repeat) {
         el.currentTime = 0;
         el.play().catch(() => {});
@@ -129,7 +114,7 @@ export default function BottomPlayer({
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("ended", onEnded);
     };
-  }, [mode, repeat, onNext, onPlayPause, userSeeking]);
+  }, [mode, repeat, onNext, userSeeking]);
 
   const fmt = (s) => {
     const sec = Math.max(0, Math.floor(Number(s || 0)));
@@ -138,26 +123,20 @@ export default function BottomPlayer({
     return `${m}:${r}`;
   };
 
-  const canPrevNext = Array.isArray(queue) && queue.length > 1;
-  const disabled = !src;
+  const canPrevNext = queue.length > 1;
 
   return (
     <div style={wrap}>
       <div style={inner}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            onClick={() => (!disabled ? onPlayPause(!isPlaying) : null)}
-            style={{ ...playBtn, opacity: disabled ? 0.45 : 1, cursor: disabled ? "not-allowed" : "pointer" }}
-            aria-label="Play pause"
-            disabled={disabled}
-          >
-            {isPlaying ? "❚❚" : "▶"}
+          <button onClick={() => onPlayPause(!isPlaying)} style={playBtn} aria-label="Play pause">
+            <span style={{ color: "#22c55e", fontWeight: 900 }}>{isPlaying ? "❚❚" : "▶"}</span>
           </button>
 
           <div style={info}>
             <div style={titleStyle}>{title}</div>
             {mode === "preview" ? (
-              <div style={sub}>Preview: {disabled ? "—" : `${secondsLeft}s`}</div>
+              <div style={sub}>Preview: {secondsLeft}s</div>
             ) : (
               <div style={sub}>
                 {fmt(cur)} / {fmt(dur || 0)}
@@ -184,7 +163,6 @@ export default function BottomPlayer({
               }}
               style={scrub}
               aria-label="Scrub"
-              disabled={disabled}
             />
           ) : (
             <div />
@@ -203,11 +181,11 @@ export default function BottomPlayer({
             </>
           ) : null}
 
-          <button onClick={onPrev} disabled={!canPrevNext} style={{ ...iconBtn, opacity: canPrevNext ? 1 : 0.45 }} aria-label="Prev">
-            ‹‹
+          <button onClick={onPrev} disabled={!canPrevNext} style={iconBtn} aria-label="Prev">
+            <span style={{ color: "#22c55e", fontWeight: 900 }}>‹‹</span>
           </button>
-          <button onClick={onNext} disabled={!canPrevNext} style={{ ...iconBtn, opacity: canPrevNext ? 1 : 0.45 }} aria-label="Next">
-            ››
+          <button onClick={onNext} disabled={!canPrevNext} style={iconBtn} aria-label="Next">
+            <span style={{ color: "#22c55e", fontWeight: 900 }}>››</span>
           </button>
         </div>
 
@@ -261,6 +239,7 @@ const playBtn = {
   color: "white",
   fontSize: 18,
   fontWeight: 900,
+  cursor: "pointer",
 };
 
 const info = {

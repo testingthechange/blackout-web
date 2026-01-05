@@ -126,8 +126,7 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {/* Card 1: Album meta */}
           <div style={card}>
-            <div style={metaLabel}>Album</div>
-            <div style={{ marginTop: 8, fontSize: 26, fontWeight: 900 }}>{albumTitle}</div>
+            <div style={{ marginTop: 2, fontSize: 26, fontWeight: 900 }}>{albumTitle}</div>
 
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "160px 1fr", gap: 8, opacity: 0.92 }}>
               <div style={k}>Performers</div>
@@ -164,6 +163,10 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
           {/* TRACKS CARD (always at bottom) */}
           <div style={{ ...card, marginTop: "auto" }}>
             <div style={{ fontWeight: 900 }}>Tracks</div>
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+              Click a song title to play a 30-second preview.
+            </div>
+
             <div style={{ marginTop: 10 }}>
               {tracks.map((t, i) => (
                 <div
@@ -192,15 +195,12 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
                     }}
                     title="Play preview"
                   >
+                    <span style={{ color: "#22c55e", fontWeight: 900, marginRight: 8 }}>▶</span>
                     {t.title || "Untitled"}{" "}
                     {t.durationSeconds ? <span style={{ opacity: 0.7 }}>({fmtTime(t.durationSeconds)})</span> : null}
                   </button>
                 </div>
               ))}
-            </div>
-
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-              Click a song title to play a 30-second preview.
             </div>
           </div>
         </div>
@@ -252,22 +252,15 @@ const card = {
   padding: 16,
 };
 
-const metaLabel = {
-  fontSize: 12,
-  fontWeight: 900,
-  opacity: 0.65,
-  textTransform: "uppercase",
-};
-
 const k = { fontSize: 12, opacity: 0.7, fontWeight: 900, textTransform: "uppercase" };
 const v = { fontSize: 14, fontWeight: 900 };
 
 const buyBtn = {
   width: "100%",
-  padding: "10px 16px", // ~30% thinner than 14px
+  padding: "10px 16px",
   borderRadius: 14,
   border: "1px solid rgba(0,0,0,0.35)",
-  background: "#22c55e", // brighter green
+  background: "#22c55e",
   color: "white",
   fontWeight: 900,
   fontSize: 16,
@@ -279,5 +272,5 @@ const includesList = {
   paddingLeft: 18,
   lineHeight: 1.7,
   opacity: 0.95,
-  fontSize: 13, // decreased font size
+  fontSize: 13,
 };
