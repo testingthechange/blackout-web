@@ -1,5 +1,5 @@
 // src/App.jsx
-import { Routes, Route, Link, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 
 import Home from "./pages/Home.jsx";
@@ -9,22 +9,26 @@ import MyAccount from "./pages/MyAccount.jsx";
 import Sold from "./pages/Sold.jsx";
 import Login from "./pages/Login.jsx";
 
+import BottomPlayer from "./components/BottomPlayer.jsx";
+
 const BACKEND_BASE = (import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
 
-function useShareIdFromQuery() {
-  return useMemo(() => {
-    const sp = new URLSearchParams(window.location.search);
-    return String(sp.get("shareId") || "").trim();
-  }, [window.location.search]); // eslint-disable-line react-hooks/exhaustive-deps
+async function fetchJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
+  return await r.json();
 }
 
 export default function App() {
   const loc = useLocation();
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  const shareId = useShareIdFromQuery();
+  const shareId = String(searchParams.get("shareId") || "").trim();
 
+  // ---------- BACKEND STATUS ----------
   const [backendStatus, setBackendStatus] = useState("checking");
+
   useEffect(() => {
     if (!BACKEND_BASE) {
       setBackendStatus("missing");
@@ -35,78 +39,146 @@ export default function App() {
       .catch(() => setBackendStatus("fail"));
   }, []);
 
-  const showSearch = loc.pathname === "/" || loc.pathname.startsWith("/shop") || loc.pathname.startsWith("/account");
+  // ---------- PLAYER STATE ----------
+  const [queue, setQueue] = useState([]); // each track: { title, s3Key, url? }
+  const [idx, setIdx] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const activeTrack = queue[idx] || null;
+
+  const playerVisible =
+    loc.pathname.startsWith("/shop") ||
+    loc.pathname.startsWith("/account") ||
+    loc.pathname.startsWith("/sold");
+
+  // Cache signed urls briefly per s3Key so rapid prev/next feels instant
+  const signedCache = useMemo(() => new Map(), []);
+
+  async function signTrackIfNeeded(track) {
+    if (!track) return null;
+    const s3Key = String(track.s3Key || "").trim();
+    if (!s3Key) return track;
+
+    // if already has url, keep it
+    if (track.url) return track;
+
+    if (!BACKEND_BASE) throw new Error("Missing backend env");
+
+    // cache hit
+    if (signedCache.has(s3Key)) {
+      return { ...track, url: signedCache.get(s3Key) };
+    }
+
+    const j = await fetchJson(`${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`);
+    if (!j?.ok || !j.url) throw new Error("Failed to sign playback url");
+    signedCache.set(s3Key, j.url);
+    return { ...track, url: j.url };
+  }
+
+  // Called by pages when user clicks play (user gesture)
+  async function setPlayContext({ tracks, index }) {
+    if (!Array.isArray(tracks) || !tracks.length) return;
+
+    const i = Math.max(0, Math.min(Number(index || 0), tracks.length - 1));
+    const t = await signTrackIfNeeded(tracks[i]);
+
+    // ensure queue entry at i contains url
+    const nextQueue = tracks.map((x, k) => (k === i ? t : x));
+    setQueue(nextQueue);
+    setIdx(i);
+    setIsPlaying(true);
+  }
+
+  async function goPrev() {
+    if (!queue.length) return;
+    const nextI = idx > 0 ? idx - 1 : queue.length - 1;
+    const t = await signTrackIfNeeded(queue[nextI]);
+    const nextQueue = queue.map((x, k) => (k === nextI ? t : x));
+    setQueue(nextQueue);
+    setIdx(nextI);
+    setIsPlaying(true);
+  }
+
+  async function goNext() {
+    if (!queue.length) return;
+    const nextI = (idx + 1) % queue.length;
+    const t = await signTrackIfNeeded(queue[nextI]);
+    const nextQueue = queue.map((x, k) => (k === nextI ? t : x));
+    setQueue(nextQueue);
+    setIdx(nextI);
+    setIsPlaying(true);
+  }
+
+  const playerMode = useMemo(() => {
+    // Shop/Product => preview; Account => full
+    if (loc.pathname.startsWith("/account")) return "full";
+    if (loc.pathname.startsWith("/shop")) return "preview";
+    return "preview";
+  }, [loc.pathname]);
 
   return (
     <div style={{ minHeight: "100vh", background: "#0b0c10", color: "white" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "16px 18px 24px" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "16px 18px 120px" }}>
+        {/* HEADER */}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ fontWeight: 900 }}>Blackout</div>
+          <div style={{ fontWeight: 900 }}>Block Radius</div>
           <div style={{ fontSize: 12 }}>
             Backend:{" "}
             {backendStatus === "ok" && "OK"}
             {backendStatus === "fail" && "FAIL"}
             {backendStatus === "missing" && "MISSING ENV"}
             {backendStatus === "checking" && "…"}
+            {" · "}
+            ShareId: {shareId || "—"}
           </div>
         </div>
 
+        {/* NAV */}
         <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-          <Link to="/" style={navLink()}>
-            Home
-          </Link>
-          <Link to={shareId ? `/shop?shareId=${encodeURIComponent(shareId)}` : "/shop"} style={navLink()}>
-            Shop
-          </Link>
-          <Link to={shareId ? `/account?shareId=${encodeURIComponent(shareId)}` : "/account"} style={navLink()}>
-            Account
-          </Link>
-          <Link to="/login" style={navLink()}>
-            Login
-          </Link>
+          <Link to="/">Home</Link>
+          <Link to={`/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}`}>Shop</Link>
+          <Link to={`/account${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}`}>Account</Link>
         </div>
 
-        {showSearch ? (
-          <div style={{ marginBottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
-            <input
-              placeholder="Search"
-              style={{
-                flex: 1,
-                padding: "12px 12px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.18)",
-                background: "rgba(255,255,255,0.06)",
-                color: "white",
-                outline: "none",
-              }}
-            />
-            <div style={{ fontSize: 12, opacity: 0.85 }}>
-              ShareId: <span style={{ fontFamily: "monospace", fontWeight: 900 }}>{shareId || "—"}</span>
-            </div>
-          </div>
-        ) : null}
-
+        {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={shareId} />} />
+
+          <Route
+            path="/shop"
+            element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
+          />
+
           <Route
             path="/shop/product/:shareId"
             element={
               <Product
                 backendBase={BACKEND_BASE}
+                onPickTrack={setPlayContext}
                 onBuy={(id) => nav(`/sold?productId=${encodeURIComponent(id)}`)}
               />
             }
           />
+
           <Route path="/account" element={<MyAccount backendBase={BACKEND_BASE} shareId={shareId} />} />
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
         </Routes>
       </div>
+
+      {playerVisible && activeTrack?.url ? (
+        <BottomPlayer
+          mode={playerMode}
+          track={activeTrack}
+          queue={queue}
+          index={idx}
+          isPlaying={isPlaying}
+          onPlayPause={setIsPlaying}
+          onPrev={goPrev}
+          onNext={goNext}
+          previewSeconds={30}
+        />
+      ) : null}
     </div>
   );
-}
-
-function navLink() {
-  return { color: "white", textDecoration: "none", fontWeight: 900, opacity: 0.9 };
 }
