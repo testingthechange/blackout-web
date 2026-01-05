@@ -1,3 +1,4 @@
+// src/components/BottomPlayer.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function BottomPlayer({
@@ -22,13 +23,16 @@ export default function BottomPlayer({
   const audioRef = useRef(null);
   const [secondsLeft, setSecondsLeft] = useState(previewSeconds);
 
-  const title = useMemo(() => (track ? track.title || "Untitled" : "No track selected"), [track]);
+  const title = useMemo(() => (track ? track.title || "No track selected" : "No track selected"), [track]);
 
   const src = useMemo(() => {
     if (!track) return "";
     return String(track.previewUrl || track.url || "").trim();
   }, [track]);
 
+  const canPlay = !!src;
+
+  // Reset when track changes
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -46,10 +50,13 @@ export default function BottomPlayer({
     el.currentTime = 0;
     el.load();
 
-    if (isPlaying) el.play().catch(() => {});
+    if (isPlaying) {
+      el.play().catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
+  // Play/pause external control
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -58,6 +65,7 @@ export default function BottomPlayer({
     else el.pause();
   }, [isPlaying, src]);
 
+  // Preview limiter (shop/product mode) + auto-continue
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -72,15 +80,22 @@ export default function BottomPlayer({
       if (t >= previewSeconds) {
         el.pause();
         el.currentTime = 0;
+
+        // auto-continue to next track when preview completes
+        if (queue.length > 1 && typeof onNext === "function") {
+          onNext();
+          return;
+        }
+
         onPlayPause(false);
-        onNext?.(); // auto-continue after sample
       }
     };
 
     el.addEventListener("timeupdate", onTime);
     return () => el.removeEventListener("timeupdate", onTime);
-  }, [mode, previewSeconds, onPlayPause, onNext]);
+  }, [mode, previewSeconds, onPlayPause, onNext, queue.length]);
 
+  // Full mode scrub (kept)
   const [dur, setDur] = useState(0);
   const [cur, setCur] = useState(0);
   const [userSeeking, setUserSeeking] = useState(false);
@@ -96,7 +111,10 @@ export default function BottomPlayer({
     };
 
     const onEnded = () => {
-      if (mode === "preview") return;
+      if (mode === "preview") {
+        onPlayPause(false);
+        return;
+      }
       if (repeat) {
         el.currentTime = 0;
         el.play().catch(() => {});
@@ -114,7 +132,7 @@ export default function BottomPlayer({
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("ended", onEnded);
     };
-  }, [mode, repeat, onNext, userSeeking]);
+  }, [mode, repeat, onNext, onPlayPause, userSeeking]);
 
   const fmt = (s) => {
     const sec = Math.max(0, Math.floor(Number(s || 0)));
@@ -128,9 +146,15 @@ export default function BottomPlayer({
   return (
     <div style={wrap}>
       <div style={inner}>
+        {/* LEFT: play/pause */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={() => onPlayPause(!isPlaying)} style={playBtn} aria-label="Play pause">
-            <span style={{ color: "#22c55e", fontWeight: 900 }}>{isPlaying ? "❚❚" : "▶"}</span>
+          <button
+            onClick={() => (canPlay ? onPlayPause(!isPlaying) : null)}
+            style={{ ...playBtn, opacity: canPlay ? 1 : 0.5, cursor: canPlay ? "pointer" : "not-allowed" }}
+            aria-label="Play pause"
+            disabled={!canPlay}
+          >
+            <span style={{ color: GREEN }}>{isPlaying ? "❚❚" : "▶"}</span>
           </button>
 
           <div style={info}>
@@ -145,6 +169,7 @@ export default function BottomPlayer({
           </div>
         </div>
 
+        {/* MIDDLE: scrub in full mode */}
         <div style={{ flex: 1, minWidth: 0 }}>
           {mode === "full" ? (
             <input
@@ -169,6 +194,7 @@ export default function BottomPlayer({
           )}
         </div>
 
+        {/* RIGHT: shuffle/repeat then prev/next far right */}
         <div style={rightControls}>
           {mode === "full" ? (
             <>
@@ -181,11 +207,11 @@ export default function BottomPlayer({
             </>
           ) : null}
 
-          <button onClick={onPrev} disabled={!canPrevNext} style={iconBtn} aria-label="Prev">
-            <span style={{ color: "#22c55e", fontWeight: 900 }}>‹‹</span>
+          <button onClick={onPrev} disabled={!canPrevNext} style={iconBtn(canPrevNext)} aria-label="Prev">
+            <span style={{ color: GREEN }}>‹‹</span>
           </button>
-          <button onClick={onNext} disabled={!canPrevNext} style={iconBtn} aria-label="Next">
-            <span style={{ color: "#22c55e", fontWeight: 900 }}>››</span>
+          <button onClick={onNext} disabled={!canPrevNext} style={iconBtn(canPrevNext)} aria-label="Next">
+            <span style={{ color: GREEN }}>››</span>
           </button>
         </div>
 
@@ -195,6 +221,8 @@ export default function BottomPlayer({
   );
 }
 
+const GREEN = "rgb(34,197,94)";
+
 const wrap = {
   position: "fixed",
   bottom: 0,
@@ -202,7 +230,7 @@ const wrap = {
   right: 0,
   padding: "14px 16px",
   borderTop: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(32,32,32,0.92)",
+  background: "rgba(17,24,39,0.94)",
   backdropFilter: "blur(12px)",
 };
 
@@ -220,30 +248,29 @@ const rightControls = {
   gap: 10,
 };
 
-const iconBtn = {
+const iconBtn = (enabled) => ({
   padding: "10px 12px",
   borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.16)",
   background: "rgba(255,255,255,0.06)",
   color: "white",
   fontWeight: 900,
-  cursor: "pointer",
-};
+  cursor: enabled ? "pointer" : "not-allowed",
+  opacity: enabled ? 1 : 0.5,
+});
 
 const playBtn = {
   width: 52,
   height: 52,
   borderRadius: "50%",
   border: "1px solid rgba(255,255,255,0.2)",
-  background: "rgba(255,255,255,0.14)",
-  color: "white",
+  background: "rgba(255,255,255,0.10)",
   fontSize: 18,
   fontWeight: 900,
-  cursor: "pointer",
 };
 
 const info = {
-  width: 260,
+  width: 320,
   color: "white",
   minWidth: 0,
 };

@@ -1,3 +1,4 @@
+// src/App.jsx
 import { Routes, Route, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 
@@ -21,13 +22,13 @@ async function fetchJson(url) {
 export default function App() {
   const loc = useLocation();
   const nav = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const shareId = String(searchParams.get("shareId") || "").trim();
+  const qParam = String(searchParams.get("q") || "").trim();
 
   // ---------- BACKEND STATUS ----------
   const [backendStatus, setBackendStatus] = useState("checking");
-
   useEffect(() => {
     if (!BACKEND_BASE) {
       setBackendStatus("missing");
@@ -38,6 +39,18 @@ export default function App() {
       .catch(() => setBackendStatus("fail"));
   }, []);
 
+  // ---------- GLOBAL SEARCH (UI under Login, top-right) ----------
+  const [searchDraft, setSearchDraft] = useState(qParam);
+  useEffect(() => setSearchDraft(qParam), [qParam]);
+
+  function updateQueryParam(nextQ) {
+    const next = new URLSearchParams(searchParams);
+    if (nextQ) next.set("q", nextQ);
+    else next.delete("q");
+    // preserve shareId if present (already in searchParams)
+    setSearchParams(next, { replace: true });
+  }
+
   // ---------- PLAYER STATE ----------
   const [queue, setQueue] = useState([]); // each track: { title, s3Key, url? }
   const [idx, setIdx] = useState(0);
@@ -45,11 +58,8 @@ export default function App() {
 
   const activeTrack = queue[idx] || null;
 
-  // Always reserve layout space for player on these pages
-  const playerVisible =
-    loc.pathname.startsWith("/shop") ||
-    loc.pathname.startsWith("/account") ||
-    loc.pathname.startsWith("/sold");
+  // show player always on Product page (layout locked requirement)
+  const playerVisible = loc.pathname.startsWith("/shop/product");
 
   // Cache signed urls briefly per s3Key so rapid prev/next feels instant
   const signedCache = useMemo(() => new Map(), []);
@@ -72,7 +82,7 @@ export default function App() {
     return { ...track, url: j.url };
   }
 
-  // Called by pages when user clicks a track title (user gesture)
+  // Called by pages when user clicks play (user gesture)
   async function setPlayContext({ tracks, index }) {
     if (!Array.isArray(tracks) || !tracks.length) return;
 
@@ -105,46 +115,67 @@ export default function App() {
     setIsPlaying(true);
   }
 
-  const playerMode = useMemo(() => {
-    // Shop/Product => preview; Account => full
-    if (loc.pathname.startsWith("/account")) return "full";
-    if (loc.pathname.startsWith("/shop")) return "preview";
-    return "preview";
-  }, [loc.pathname]);
+  const playerMode = "preview"; // product page is preview-only right now
+
+  const shopHref = `/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""}`;
+  const accountHref = `/account${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""}`;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0b0c10", color: "white" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "16px 18px 120px" }}>
-        {/* HEADER */}
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ fontWeight: 900 }}>Block Radius</div>
-          <div style={{ fontSize: 12 }}>
-            Backend:{" "}
-            {backendStatus === "ok" && "OK"}
-            {backendStatus === "fail" && "FAIL"}
-            {backendStatus === "missing" && "MISSING ENV"}
-            {backendStatus === "checking" && "…"}
-            {" · "}
-            ShareId: {shareId || "—"}
-          </div>
-        </div>
+    <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 120px" }}>
+        {/* HEADER: left brand, centered nav, right login + search under it */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "start", gap: 12, marginBottom: 14 }}>
+          <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Block Radius</div>
 
-        {/* NAV */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-          <Link to="/">Home</Link>
-          <Link to={`/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}`}>Shop</Link>
-          <Link to={`/account${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}`}>Account</Link>
+          <div style={{ display: "flex", justifyContent: "center", gap: 18, paddingTop: 2 }}>
+            <Link to="/" style={navLink}>Home</Link>
+            <Link to={shopHref} style={navLink}>Shop</Link>
+            <Link to={accountHref} style={navLink}>Account</Link>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ width: 320 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, alignItems: "center" }}>
+                <Link to="/login" style={loginLink}>Login</Link>
+                <div style={{ fontSize: 12, opacity: 0.85 }}>
+                  Backend:{" "}
+                  {backendStatus === "ok" && "OK"}
+                  {backendStatus === "fail" && "FAIL"}
+                  {backendStatus === "missing" && "MISSING ENV"}
+                  {backendStatus === "checking" && "…"}
+                  {" · "}
+                  ShareId: {shareId || "—"}
+                </div>
+              </div>
+
+              {/* GLOBAL SEARCH (under login) */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  updateQueryParam(String(searchDraft || "").trim());
+                  if (!loc.pathname.startsWith("/shop")) nav("/shop" + window.location.search);
+                }}
+                style={{ marginTop: 10, display: "flex", gap: 8, justifyContent: "flex-end" }}
+              >
+                <input
+                  value={searchDraft}
+                  onChange={(e) => setSearchDraft(e.target.value)}
+                  placeholder="Search"
+                  style={searchInput}
+                />
+                <button type="submit" style={searchBtn}>Search</button>
+              </form>
+            </div>
+          </div>
         </div>
 
         {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
-
           <Route
             path="/shop"
             element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
           />
-
           <Route
             path="/shop/product/:shareId"
             element={
@@ -155,17 +186,17 @@ export default function App() {
               />
             }
           />
-
           <Route path="/account" element={<MyAccount backendBase={BACKEND_BASE} shareId={shareId} />} />
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
         </Routes>
       </div>
 
+      {/* PLAYER: always shown on Product page (even before a track is picked) */}
       {playerVisible ? (
         <BottomPlayer
           mode={playerMode}
-          track={activeTrack}              // may be null before click; player stays visible
+          track={activeTrack}
           queue={queue}
           index={idx}
           isPlaying={isPlaying}
@@ -178,3 +209,41 @@ export default function App() {
     </div>
   );
 }
+
+const navLink = {
+  color: "white",
+  textDecoration: "none",
+  fontWeight: 900,
+  opacity: 0.9,
+};
+
+const loginLink = {
+  color: "white",
+  textDecoration: "none",
+  fontWeight: 900,
+  padding: "6px 10px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.06)",
+};
+
+const searchInput = {
+  width: 220,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.18)",
+  outline: "none",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  fontWeight: 800,
+};
+
+const searchBtn = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(34,197,94,0.55)",
+  background: "rgba(34,197,94,0.20)",
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
+};
