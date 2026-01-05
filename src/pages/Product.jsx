@@ -18,6 +18,7 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
 
   const [status, setStatus] = useState("loading");
   const [manifest, setManifest] = useState(null);
+  const [err, setErr] = useState(null);
 
   useEffect(() => {
     if (!backendBase) {
@@ -30,15 +31,24 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
     }
 
     setStatus("loading");
+    setErr(null);
+
     fetch(`${backendBase}/api/publish/${encodeURIComponent(shareId)}/manifest`, { cache: "no-store" })
-      .then((r) => r.json())
+      .then(async (r) => {
+        const j = await r.json().catch(() => null);
+        if (!r.ok) {
+          throw new Error(j?.error || `HTTP ${r.status}`);
+        }
+        return j;
+      })
       .then((j) => {
-        if (!j?.ok || !Array.isArray(j.tracks)) throw new Error();
+        if (!j?.ok || !Array.isArray(j.tracks)) throw new Error("manifest missing tracks");
         setManifest(j);
         setStatus("ok");
       })
-      .catch(() => {
+      .catch((e) => {
         setManifest(null);
+        setErr(e);
         setStatus("fail");
       });
   }, [backendBase, shareId]);
@@ -47,7 +57,7 @@ export default function Product({ backendBase, onPickTrack, onBuy }) {
 
   if (status === "missing-env") return <ErrorPanel title="Backend missing" details="Missing VITE_ALBUM_BACKEND_URL." />;
 
-  if (status === "fail") return <ErrorPanel title="Failed to load product" details="Publish manifest request failed." />;
+  if (status === "fail") return <ErrorPanel title="Failed to load product" details={String(err?.message || err)} />;
 
   if (!manifest) return <div style={{ padding: 16 }}>Loading…</div>;
 
