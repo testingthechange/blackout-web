@@ -24,8 +24,17 @@ export default function App() {
   const nav = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // shareId from querystring (?shareId=...)
   const shareId = String(searchParams.get("shareId") || "").trim();
   const qParam = String(searchParams.get("q") || "").trim();
+
+  // shareId from route (/shop/product/:shareId)
+  const routeShareId = useMemo(() => {
+    const m = loc.pathname.match(/^\/shop\/product\/([^/]+)/);
+    return m?.[1] ? decodeURIComponent(m[1]) : "";
+  }, [loc.pathname]);
+
+  const activeShareId = routeShareId || shareId;
 
   // ---------- BACKEND STATUS ----------
   const [backendStatus, setBackendStatus] = useState("checking");
@@ -114,7 +123,26 @@ export default function App() {
     setIsPlaying(true);
   }
 
-  const playerMode = "preview"; // product page is preview-only right now
+  // Account page is also full later; for now: preview on Product
+  const playerMode = "preview";
+
+  // ---------- ACCOUNT: listen for MyAccount menu "Play" ----------
+  // MyAccount dispatches: window.dispatchEvent(new CustomEvent("sb:play-track", { detail: { shareId, s3Key, title, slot } }))
+  useEffect(() => {
+    function onPlayTrack(e) {
+      const d = e?.detail || {};
+      const s3Key = String(d.s3Key || "").trim();
+      if (!s3Key) return;
+
+      // Build a one-item queue (simple + safe). Expand later when MyAccount passes full track list.
+      const tracks = [{ title: String(d.title || "Untitled"), s3Key }];
+      setPlayContext({ tracks, index: 0 });
+    }
+
+    window.addEventListener("sb:play-track", onPlayTrack);
+    return () => window.removeEventListener("sb:play-track", onPlayTrack);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [BACKEND_BASE]);
 
   const shopHref = `/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${
     qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
@@ -182,7 +210,7 @@ export default function App() {
             {backendStatus === "missing" && "MISSING ENV"}
             {backendStatus === "checking" && "…"}
           </div>
-          <div>ShareId: {shareId || "—"}</div>
+          <div>ShareId: {activeShareId || "—"}</div>
         </div>
 
         {/* ROUTES */}

@@ -1,3 +1,4 @@
+// src/pages/MyAccount.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 
 function mmss(seconds) {
@@ -71,10 +72,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState(null);
 
-  // kebab menu
   const [openMenuKey, setOpenMenuKey] = useState(null);
-
-  // modal
   const [modal, setModal] = useState(null); // { type: "lyrics"|"credits", track }
 
   // --- Load manifest (published) ---
@@ -119,10 +117,13 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
       slot: Number(t.slot || i + 1),
       title: String(t.title || "").trim() || "Untitled",
       s3Key: String(t.s3Key || "").trim(),
+
+      // Optional: if your publish step includes it later
       durationSec: Number(t.durationSec || 0),
+
+      // Future meta fields (support multiple possible keys)
       lyrics: t.lyrics,
       credits: t.credits,
-      // allow future names too (in case backend uses different keys later)
       lyricsText: t.lyricsText,
       creditsText: t.creditsText,
     }));
@@ -207,7 +208,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
                 onOpenMenu={() => setOpenMenuKey((k) => (k === t.s3Key ? null : t.s3Key))}
                 onCloseMenu={() => setOpenMenuKey(null)}
                 onPlay={() => {
-                  // IMPORTANT: use the existing global player
+                  // Use existing global player context (App.jsx)
                   onPickTrack?.({ tracks, index: i });
                   setOpenMenuKey(null);
                 }}
@@ -272,7 +273,6 @@ function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay,
         </div>
       </div>
 
-      {/* 3-dot menu */}
       <div style={{ position: "relative" }} ref={menuRef}>
         <button
           onClick={onOpenMenu}
@@ -339,13 +339,3 @@ function MenuItem({ label, onClick, accent }) {
     </button>
   );
 }
-      <Route
-        path="/account"
-        element={
-          <MyAccount
-            backendBase={BACKEND_BASE}
-            shareId={shareId}
-            onPickTrack={setPlayContext}
-          />
-        }
-      />
