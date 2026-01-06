@@ -72,18 +72,12 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState(null);
 
-  // 3-dot menu
   const [openMenuKey, setOpenMenuKey] = useState(null);
-
-  // modal
   const [modal, setModal] = useState(null); // { type: "lyrics"|"credits", track }
 
-  // durations: s3Key -> seconds
   const [durByKey, setDurByKey] = useState(() => new Map());
-  // signed url cache per s3Key (only for metadata probing)
   const [signedByKey, setSignedByKey] = useState(() => new Map());
 
-  // --- Load manifest (published) ---
   useEffect(() => {
     if (!backendBase) {
       setStatus("missing-env");
@@ -124,7 +118,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
       slot: Number(t.slot || i + 1),
       title: String(t.title || "").trim() || "Untitled",
       s3Key: String(t.s3Key || "").trim(),
-      durationSec: Number(t.durationSec || 0), // if you later publish it
+      durationSec: Number(t.durationSec || 0),
       lyrics: t.lyrics,
       credits: t.credits,
       lyricsText: t.lyricsText,
@@ -132,7 +126,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     }));
   }, [manifest]);
 
-  // --- Sign a single s3Key on demand (for metadata probe) ---
   async function signIfNeeded(s3Key) {
     const key = String(s3Key || "").trim();
     if (!key) return null;
@@ -157,7 +150,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     const key = String(track?.s3Key || "").trim();
     if (!key) return;
 
-    // prefer published duration if present
     if (track?.durationSec && track.durationSec > 0) {
       setDurByKey((prev) => {
         if (prev.get(key)) return prev;
@@ -194,7 +186,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     });
   }
 
-  // prime durations (small N ok)
   useEffect(() => {
     if (!backendBase) return;
     if (!tracks.length) return;
@@ -205,9 +196,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
         if (!alive) return;
         try {
           await ensureDuration(t);
-        } catch {
-          // ignore; show --:--
-        }
+        } catch {}
       }
     })();
 
@@ -217,7 +206,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tracks.length, backendBase]);
 
-  // ---- Meta getters (ready for incoming snapshot meta) ----
   function getLyrics(track) {
     return (
       String(track?.lyricsText || track?.lyrics || "") ||
@@ -232,7 +220,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     );
   }
 
-  // --- UI states ---
   if (status === "missing-env") {
     return (
       <div style={{ padding: 16 }}>
@@ -269,50 +256,64 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
 
   const green = "#22c55e";
 
+  // try to support future manifest cover fields if you add them
+  const coverUrl =
+    String(manifest?.coverUrl || "") ||
+    String(manifest?.albumCoverUrl || "") ||
+    "";
+
   return (
     <div style={{ padding: 16 }}>
       <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 10 }}>Account</div>
 
-      {/* Collection bar (thumbnail albums) */}
+      {/* Collection bar (unchanged) */}
       <div style={collectionBar}>
         <div style={{ fontWeight: 900, marginBottom: 8 }}>My Collection</div>
         <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
-          {/* Placeholder album tiles (wire to real collection later) */}
           <AlbumThumb title="Block Radius" active />
           <AlbumThumb title="Album 2" />
           <AlbumThumb title="Album 3" />
         </div>
       </div>
 
-      {/* 2-column cards (product-like) */}
+      {/* 2-column cards */}
       <div style={grid2col}>
-        {/* LEFT column (wider) */}
-        <div style={{ display: "grid", gap: 12 }}>
+        {/* LEFT column: ONLY ONE CARD (album cover) */}
+        <div>
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Account</div>
-            <div style={{ opacity: 0.85, fontSize: 13 }}>
-              Purchased albums and downloads will live here. (Placeholder copy)
-            </div>
-          </div>
-
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Downloads</div>
-            <div style={{ opacity: 0.85, fontSize: 13 }}>
-              Coming next: MP3 + stems + artifacts. (Placeholder)
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Album Cover</div>
+            <div
+              style={{
+                width: "100%",
+                aspectRatio: "1 / 1",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.04)",
+                overflow: "hidden",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              {coverUrl ? (
+                <img
+                  src={coverUrl}
+                  alt="Album cover"
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
+              ) : (
+                <div style={{ opacity: 0.75, fontWeight: 900 }}>Cover image pending</div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* RIGHT column (narrower) */}
+        {/* RIGHT column (keep structure): tracks card bottom-right */}
         <div style={{ display: "grid", gap: 12 }}>
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Membership</div>
-            <div style={{ opacity: 0.85, fontSize: 13 }}>
-              Wallet/NFT access and perks. (Placeholder)
-            </div>
+            <div style={{ opacity: 0.85, fontSize: 13 }}>Wallet/NFT access and perks. (Placeholder)</div>
           </div>
 
-          {/* TRACKS card MUST be bottom of right column */}
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracks</div>
 
@@ -330,7 +331,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
                     onOpenMenu={() => setOpenMenuKey((k) => (k === t.s3Key ? null : t.s3Key))}
                     onCloseMenu={() => setOpenMenuKey(null)}
                     onPlay={() => {
-                      onPickTrack?.({ tracks, index: i }); // global player
+                      onPickTrack?.({ tracks, index: i });
                       setOpenMenuKey(null);
                     }}
                     onLyrics={() => {
@@ -431,7 +432,6 @@ function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay,
         {track.title} <span style={{ opacity: 0.72, fontWeight: 800 }}>({timeStr})</span>
       </button>
 
-      {/* 3-dot menu */}
       <div style={{ position: "relative" }} ref={menuRef}>
         <button
           onClick={onOpenMenu}

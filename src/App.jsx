@@ -66,10 +66,15 @@ export default function App() {
 
   const activeTrack = queue[idx] || null;
 
-  // SHOW PLAYER on Product + Account (layout locked requirement)
-  const playerVisible =
-    loc.pathname.startsWith("/shop/product") ||
-    loc.pathname.startsWith("/account");
+  const onProductPage = loc.pathname.startsWith("/shop/product");
+  const onAccountPage = loc.pathname.startsWith("/account");
+
+  // SHOW PLAYER on Product + Account
+  const playerVisible = onProductPage || onAccountPage;
+
+  // Product = preview, Account = full
+  const playerMode = onAccountPage ? "full" : "preview";
+  const playerPreviewSeconds = onAccountPage ? undefined : 30;
 
   // Cache signed urls briefly per s3Key
   const signedCache = useMemo(() => new Map(), []);
@@ -92,7 +97,7 @@ export default function App() {
     return { ...track, url: j.url };
   }
 
-  // Called by pages when user clicks play (user gesture)
+  // Called by pages when user clicks play
   async function setPlayContext({ tracks, index }) {
     if (!Array.isArray(tracks) || !tracks.length) return;
 
@@ -124,9 +129,6 @@ export default function App() {
     setIdx(nextI);
     setIsPlaying(true);
   }
-
-  // preview for now
-  const playerMode = "preview";
 
   const shopHref = `/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${
     qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
@@ -190,10 +192,7 @@ export default function App() {
         {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route
-            path="/shop"
-            element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
-          />
+          <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />} />
           <Route
             path="/shop/product/:shareId"
             element={
@@ -224,7 +223,7 @@ export default function App() {
           onPlayPause={setIsPlaying}
           onPrev={goPrev}
           onNext={goNext}
-          previewSeconds={30}
+          {...(playerPreviewSeconds ? { previewSeconds: playerPreviewSeconds } : {})}
         />
       ) : null}
     </div>
