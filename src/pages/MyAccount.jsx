@@ -1,3 +1,4 @@
+// src/pages/MyAccount.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 
 function mmss(seconds) {
@@ -77,7 +78,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   // modal
   const [modal, setModal] = useState(null); // { type: "lyrics"|"credits", track }
 
-  // (optional) durations: s3Key -> seconds
+  // durations: s3Key -> seconds
   const [durByKey, setDurByKey] = useState(() => new Map());
   // signed url cache per s3Key (only for metadata probing)
   const [signedByKey, setSignedByKey] = useState(() => new Map());
@@ -156,6 +157,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     const key = String(track?.s3Key || "").trim();
     if (!key) return;
 
+    // prefer published duration if present
     if (track?.durationSec && track.durationSec > 0) {
       setDurByKey((prev) => {
         if (prev.get(key)) return prev;
@@ -271,12 +273,48 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     <div style={{ padding: 16 }}>
       <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 10 }}>Account</div>
 
-      {/* 2-column layout (restored) */}
+      {/* Collection bar (thumbnail albums) */}
+      <div style={collectionBar}>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>My Collection</div>
+        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
+          {/* Placeholder album tiles (wire to real collection later) */}
+          <AlbumThumb title="Block Radius" active />
+          <AlbumThumb title="Album 2" />
+          <AlbumThumb title="Album 3" />
+        </div>
+      </div>
+
+      {/* 2-column cards (product-like) */}
       <div style={grid2col}>
-        {/* LEFT column (wider): tracks */}
-        <div>
+        {/* LEFT column (wider) */}
+        <div style={{ display: "grid", gap: 12 }}>
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Your Album</div>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Account</div>
+            <div style={{ opacity: 0.85, fontSize: 13 }}>
+              Purchased albums and downloads will live here. (Placeholder copy)
+            </div>
+          </div>
+
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Downloads</div>
+            <div style={{ opacity: 0.85, fontSize: 13 }}>
+              Coming next: MP3 + stems + artifacts. (Placeholder)
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT column (narrower) */}
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Membership</div>
+            <div style={{ opacity: 0.85, fontSize: 13 }}>
+              Wallet/NFT access and perks. (Placeholder)
+            </div>
+          </div>
+
+          {/* TRACKS card MUST be bottom of right column */}
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracks</div>
 
             <div style={{ display: "grid", gap: 8 }}>
               {tracks.map((t, i) => {
@@ -310,24 +348,8 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
             </div>
           </div>
         </div>
-
-        {/* RIGHT column: placeholder panels (keeps 2-col structure) */}
-        <div style={{ display: "grid", gap: 12 }}>
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Library</div>
-            <div style={{ opacity: 0.8, fontSize: 13 }}>Lyrics/Credits are available in the 3-dot menu per song.</div>
-          </div>
-
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Meta (incoming)</div>
-            <div style={{ opacity: 0.8, fontSize: 13 }}>
-              Ready to consume published snapshot meta when you add it to the manifest.
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* FIXED MODAL (no extra ": null" inside the inner ternary) */}
       {modal ? (
         <Modal
           title={`${modal.type === "lyrics" ? "Lyrics" : "Credits"} — ${modal.track?.title || "Track"}`}
@@ -344,6 +366,26 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
           )}
         </Modal>
       ) : null}
+    </div>
+  );
+}
+
+function AlbumThumb({ title, active }) {
+  return (
+    <div
+      style={{
+        minWidth: 120,
+        height: 70,
+        borderRadius: 14,
+        border: active ? "1px solid rgba(34,197,94,0.55)" : "1px solid rgba(255,255,255,0.12)",
+        background: active ? "rgba(34,197,94,0.10)" : "rgba(255,255,255,0.04)",
+        display: "grid",
+        placeItems: "center",
+        fontWeight: 900,
+        opacity: active ? 1 : 0.85,
+      }}
+    >
+      {title}
     </div>
   );
 }
@@ -368,11 +410,26 @@ function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay,
     >
       <div style={{ width: 26, opacity: 0.7, fontWeight: 900 }}>{track.slot}</div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {track.title} <span style={{ opacity: 0.72, fontWeight: 800 }}>({timeStr})</span>
-        </div>
-      </div>
+      <button
+        onClick={onPlay}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          textAlign: "left",
+          border: "none",
+          background: "transparent",
+          color: "white",
+          cursor: "pointer",
+          padding: 0,
+          fontWeight: 900,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+        title={track.title}
+      >
+        {track.title} <span style={{ opacity: 0.72, fontWeight: 800 }}>({timeStr})</span>
+      </button>
 
       {/* 3-dot menu */}
       <div style={{ position: "relative" }} ref={menuRef}>
@@ -410,7 +467,6 @@ function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay,
               zIndex: 50,
             }}
           >
-            <MenuItem label="Play" onClick={onPlay} accent={accent} />
             <MenuItem label="Lyrics" onClick={onLyrics} accent={accent} />
             <MenuItem label="Credits" onClick={onCredits} accent={accent} />
           </div>
@@ -441,6 +497,14 @@ function MenuItem({ label, onClick, accent }) {
     </button>
   );
 }
+
+const collectionBar = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  borderRadius: 16,
+  padding: 14,
+  background: "rgba(255,255,255,0.03)",
+  marginBottom: 12,
+};
 
 const grid2col = {
   display: "grid",

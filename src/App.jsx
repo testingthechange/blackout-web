@@ -48,7 +48,7 @@ export default function App() {
       .catch(() => setBackendStatus("fail"));
   }, []);
 
-  // ---------- GLOBAL SEARCH (UI under Login, top-right) ----------
+  // ---------- GLOBAL SEARCH ----------
   const [searchDraft, setSearchDraft] = useState(qParam);
   useEffect(() => setSearchDraft(qParam), [qParam]);
 
@@ -66,8 +66,10 @@ export default function App() {
 
   const activeTrack = queue[idx] || null;
 
-  // show player always on Product page (layout locked requirement)
-  const playerVisible = loc.pathname.startsWith("/shop/product");
+  // SHOW PLAYER on Product + Account (layout locked requirement)
+  const playerVisible =
+    loc.pathname.startsWith("/shop/product") ||
+    loc.pathname.startsWith("/account");
 
   // Cache signed urls briefly per s3Key
   const signedCache = useMemo(() => new Map(), []);
@@ -123,26 +125,8 @@ export default function App() {
     setIsPlaying(true);
   }
 
-  // Account page is also full later; for now: preview on Product
+  // preview for now
   const playerMode = "preview";
-
-  // ---------- ACCOUNT: listen for MyAccount menu "Play" ----------
-  // MyAccount dispatches: window.dispatchEvent(new CustomEvent("sb:play-track", { detail: { shareId, s3Key, title, slot } }))
-  useEffect(() => {
-    function onPlayTrack(e) {
-      const d = e?.detail || {};
-      const s3Key = String(d.s3Key || "").trim();
-      if (!s3Key) return;
-
-      // Build a one-item queue (simple + safe). Expand later when MyAccount passes full track list.
-      const tracks = [{ title: String(d.title || "Untitled"), s3Key }];
-      setPlayContext({ tracks, index: 0 });
-    }
-
-    window.addEventListener("sb:play-track", onPlayTrack);
-    return () => window.removeEventListener("sb:play-track", onPlayTrack);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [BACKEND_BASE]);
 
   const shopHref = `/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${
     qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
@@ -154,31 +138,23 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 120px" }}>
-        {/* HEADER: left brand, centered nav, right login + search under it */}
+        {/* HEADER */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "start", gap: 12 }}>
           <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Block Radius</div>
 
           <div style={{ display: "flex", justifyContent: "center", gap: 18, paddingTop: 2 }}>
-            <Link to="/" style={navLink}>
-              Home
-            </Link>
-            <Link to={shopHref} style={navLink}>
-              Shop
-            </Link>
-            <Link to={accountHref} style={navLink}>
-              Account
-            </Link>
+            <Link to="/" style={navLink}>Home</Link>
+            <Link to={shopHref} style={navLink}>Shop</Link>
+            <Link to={accountHref} style={navLink}>Account</Link>
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <div style={{ width: 320 }}>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <Link to="/login" style={loginLink}>
-                  Login
-                </Link>
+                <Link to="/login" style={loginLink}>Login</Link>
               </div>
 
-              {/* GLOBAL SEARCH (under login) */}
+              {/* GLOBAL SEARCH */}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -193,15 +169,13 @@ export default function App() {
                   placeholder="Search"
                   style={searchInput}
                 />
-                <button type="submit" style={searchBtn}>
-                  Search
-                </button>
+                <button type="submit" style={searchBtn}>Search</button>
               </form>
             </div>
           </div>
         </div>
 
-        {/* STATUS ROW (moved away from Login/Search) */}
+        {/* STATUS ROW */}
         <div style={statusRow}>
           <div>
             Backend:{" "}
@@ -216,7 +190,10 @@ export default function App() {
         {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />} />
+          <Route
+            path="/shop"
+            element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
+          />
           <Route
             path="/shop/product/:shareId"
             element={
@@ -227,17 +204,16 @@ export default function App() {
               />
             }
           />
-        <Route
-          path="/account"
-          element={<MyAccount backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
-/>
-
+          <Route
+            path="/account"
+            element={<MyAccount backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
+          />
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
         </Routes>
       </div>
 
-      {/* PLAYER: always shown on Product page */}
+      {/* PLAYER: shown on Product + Account */}
       {playerVisible ? (
         <BottomPlayer
           mode={playerMode}
