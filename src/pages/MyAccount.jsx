@@ -157,7 +157,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     if (!key) return;
 
     if (track?.durationSec && track.durationSec > 0) {
-      // if published, prefer it
       setDurByKey((prev) => {
         if (prev.get(key)) return prev;
         const next = new Map(prev);
@@ -316,9 +315,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
         <div style={{ display: "grid", gap: 12 }}>
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Library</div>
-            <div style={{ opacity: 0.8, fontSize: 13 }}>
-              Lyrics/Credits are available in the 3-dot menu per song.
-            </div>
+            <div style={{ opacity: 0.8, fontSize: 13 }}>Lyrics/Credits are available in the 3-dot menu per song.</div>
           </div>
 
           <div style={card}>
@@ -330,6 +327,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
         </div>
       </div>
 
+      {/* FIXED MODAL (no extra ": null" inside the inner ternary) */}
       {modal ? (
         <Modal
           title={`${modal.type === "lyrics" ? "Lyrics" : "Credits"} — ${modal.track?.title || "Track"}`}
@@ -343,7 +341,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
             <pre style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.35, opacity: 0.92 }}>
               {getCredits(modal.track) || "Credits pending (will populate from published snapshot meta)."}
             </pre>
-          ) : null}
+          )}
         </Modal>
       ) : null}
     </div>
