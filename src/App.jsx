@@ -1,4 +1,3 @@
-// src/App.jsx
 import { Routes, Route, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 
@@ -66,10 +65,8 @@ export default function App() {
 
   const activeTrack = queue[idx] || null;
 
-  // show player on Product + Account pages
-  const isProductPage = loc.pathname.startsWith("/shop/product");
-  const isAccountPage = loc.pathname.startsWith("/account");
-  const playerVisible = isProductPage || isAccountPage;
+  // show player always on Product + Account (Account must be full)
+  const playerVisible = loc.pathname.startsWith("/shop/product") || loc.pathname.startsWith("/account");
 
   // Cache signed urls briefly per s3Key
   const signedCache = useMemo(() => new Map(), []);
@@ -125,8 +122,8 @@ export default function App() {
     setIsPlaying(true);
   }
 
-  // Product = preview; Account = full
-  const playerMode = isAccountPage ? "full" : "preview";
+  const playerMode = loc.pathname.startsWith("/account") ? "full" : "preview";
+  const previewSeconds = playerMode === "preview" ? 30 : null;
 
   const shopHref = `/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${
     qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
@@ -227,7 +224,7 @@ export default function App() {
         </Routes>
       </div>
 
-      {/* PLAYER: shown on Product + Account pages */}
+      {/* PLAYER: shown on Product + Account. Account is FULL mode. */}
       {playerVisible ? (
         <BottomPlayer
           mode={playerMode}
@@ -238,7 +235,7 @@ export default function App() {
           onPlayPause={setIsPlaying}
           onPrev={goPrev}
           onNext={goNext}
-          {...(playerMode === "preview" ? { previewSeconds: 30 } : {})}
+          previewSeconds={previewSeconds}
         />
       ) : null}
     </div>

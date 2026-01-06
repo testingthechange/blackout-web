@@ -1,12 +1,19 @@
-// src/pages/MyAccount.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 
 function mmss(seconds) {
   const s = Math.max(0, Math.floor(Number(seconds || 0)));
   const m = Math.floor(s / 60);
   const r = String(s % 60).padStart(2, "0");
   return `${m}:${r}`;
+}
+
+function sumSeconds(values) {
+  let total = 0;
+  for (const v of values) {
+    const n = Number(v || 0);
+    if (Number.isFinite(n) && n > 0) total += n;
+  }
+  return total;
 }
 
 function Modal({ title, children, onClose }) {
@@ -69,6 +76,8 @@ function useOutsideClose(ref, onClose) {
 }
 
 export default function MyAccount({ backendBase, shareId, onPickTrack }) {
+  const green = "#22c55e";
+
   const [status, setStatus] = useState("idle"); // idle | missing-env | missing-shareid | loading | ok | fail
   const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState(null);
@@ -79,10 +88,14 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   // modal
   const [modal, setModal] = useState(null); // { type: "lyrics"|"credits", track }
 
-  // durations: s3Key -> seconds
+  // durations (s3Key -> seconds) for showing total time + per track time
   const [durByKey, setDurByKey] = useState(() => new Map());
   // signed url cache per s3Key (only for metadata probing)
   const [signedByKey, setSignedByKey] = useState(() => new Map());
+
+  // mini-nav tabs (Card 2, middle)
+  const tabs = ["My Collection", "Playlist", "Swag", "Other"];
+  const [activeTab, setActiveTab] = useState(tabs[0]);
 
   // --- Load manifest (published) ---
   useEffect(() => {
@@ -125,7 +138,9 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
       slot: Number(t.slot || i + 1),
       title: String(t.title || "").trim() || "Untitled",
       s3Key: String(t.s3Key || "").trim(),
-      durationSec: Number(t.durationSec || 0), // if you later publish it
+
+      // optional fields you may add later in publish manifest:
+      durationSec: Number(t.durationSec || 0),
       lyrics: t.lyrics,
       credits: t.credits,
       lyricsText: t.lyricsText,
@@ -133,7 +148,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     }));
   }, [manifest]);
 
-  // --- Sign a single s3Key on demand (for metadata probe) ---
+  // --- Sign a single s3Key on demand (for metadata probe only) ---
   async function signIfNeeded(s3Key) {
     const key = String(s3Key || "").trim();
     if (!key) return null;
@@ -141,7 +156,9 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     const cached = signedByKey.get(key);
     if (cached) return cached;
 
-    const r = await fetch(`${backendBase}/api/playback-url?s3Key=${encodeURIComponent(key)}`, { cache: "no-store" });
+    const r = await fetch(`${backendBase}/api/playback-url?s3Key=${encodeURIComponent(key)}`, {
+      cache: "no-store",
+    });
     const j = await r.json().catch(() => null);
     if (!r.ok || !j?.ok || !j?.url) throw new Error(j?.error || "Failed to sign playback url");
 
@@ -206,7 +223,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
         try {
           await ensureDuration(t);
         } catch {
-          // ignore; show --:--
+          // ignore; UI shows --:--
         }
       }
     })();
@@ -231,6 +248,25 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
       String(manifest?.metaBySlot?.[Number(track?.slot || 0)]?.credits || "")
     );
   }
+
+  // ---- Album info (Card 1, right column) ----
+  const albumName =
+    String(manifest?.albumName || manifest?.title || manifest?.albumTitle || "").trim() || "—";
+  const artist =
+    String(manifest?.artist || manifest?.performers || manifest?.performer || "").trim() || "—";
+  const releaseDate =
+    String(manifest?.releaseDate || manifest?.releasedAt || manifest?.publishedAt || "").trim() || "—";
+
+  const totalSeconds = useMemo(() => {
+    const secs = tracks.map((t) => durByKey.get(t.s3Key) || t.durationSec || 0);
+    return sumSeconds(secs);
+  }, [tracks, durByKey]);
+
+  const totalTime = totalSeconds ? mmss(totalSeconds) : "—";
+
+  // ---- Cover (left column only) ----
+  const coverUrl =
+    String(manifest?.coverUrl || manifest?.coverImageUrl || manifest?.artworkUrl || "").trim() || "";
 
   // --- UI states ---
   if (status === "missing-env") {
@@ -267,62 +303,92 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
 
   if (!manifest) return <div style={{ padding: 16 }}>Loading…</div>;
 
-  const green = "#22c55e";
-
-  // cover (best-effort fields; will show placeholder if missing)
-  const coverUrl = String(manifest.coverUrl || "");
-  const coverTitle = String(manifest.albumName || manifest.title || "Album");
-
   return (
     <div style={{ padding: 16 }}>
-      {/* My Collection bar (above 2-col layout) */}
-      <div style={{ marginBottom: 12 }}>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>My Collection</div>
-        <div style={collectionRow}>
-          <Link to={`/shop/product/${encodeURIComponent(shareId)}`} style={{ textDecoration: "none" }}>
-            <div style={thumbCard}>
-              <div style={thumbImgWrap}>
-                {coverUrl ? (
-                  <img src={coverUrl} alt="Album cover" style={thumbImg} />
-                ) : (
-                  <div style={thumbPlaceholder}>Cover</div>
-                )}
-              </div>
-              <div style={thumbTitle} title={coverTitle}>
-                {coverTitle}
-              </div>
-            </div>
-          </Link>
-        </div>
-      </div>
-
-      {/* 2-column layout (LOCKED) */}
+      {/* layout locked: 2 columns */}
       <div style={grid2col}>
-        {/* LEFT column (only album cover card) */}
+        {/* LEFT column: album cover only */}
         <div>
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Album Cover</div>
-            <div style={coverWrap}>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Cover</div>
+
+            <div
+              style={{
+                width: "100%",
+                aspectRatio: "1 / 1",
+                borderRadius: 14,
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.04)",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
               {coverUrl ? (
-                <img src={coverUrl} alt="Album cover" style={coverImg} />
+                <img
+                  src={coverUrl}
+                  alt="Album cover"
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
               ) : (
-                <div style={coverPlaceholder}>Cover image pending</div>
+                <div style={{ opacity: 0.75, fontWeight: 800 }}>Cover image pending</div>
               )}
             </div>
           </div>
         </div>
 
-        {/* RIGHT column: keep structure; Tracks card at bottom-right */}
+        {/* RIGHT column: 3 stacked cards */}
         <div style={{ display: "grid", gap: 12 }}>
-          <div style={{ height: 1 }} />
-
+          {/* Card 1: Album info (replaces Membership) */}
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Tracks</div>
-            <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 10 }}>Use ⋯ for Lyrics / Credits.</div>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Album</div>
+
+            <InfoRow label="Album name" value={albumName} />
+            <InfoRow label="Artist" value={artist} />
+            <InfoRow label="Release date" value={releaseDate} />
+            <InfoRow label="Total time" value={totalTime} />
+          </div>
+
+          {/* Card 2 (middle): Mini-nav tabs */}
+          <div style={card}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {tabs.map((t) => {
+                const active = t === activeTab;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setActiveTab(t)}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(255,255,255,0.16)",
+                      background: active ? "rgba(34,197,94,0.18)" : "rgba(255,255,255,0.06)",
+                      color: "white",
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span style={{ color: active ? green : "white" }}>{t}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: 12, opacity: 0.9 }}>
+              {activeTab === "My Collection" && <div style={{ fontWeight: 800 }}>My Collection (placeholder)</div>}
+              {activeTab === "Playlist" && <div style={{ fontWeight: 800 }}>Playlist (placeholder)</div>}
+              {activeTab === "Swag" && <div style={{ fontWeight: 800 }}>Swag (placeholder)</div>}
+              {activeTab === "Other" && <div style={{ fontWeight: 800 }}>Other (placeholder)</div>}
+            </div>
+          </div>
+
+          {/* Card 3: Tracks (at bottom of right column) */}
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracks</div>
 
             <div style={{ display: "grid", gap: 8 }}>
               {tracks.map((t, i) => {
-                const d = durByKey.get(t.s3Key) || 0;
+                const d = durByKey.get(t.s3Key) || t.durationSec || 0;
                 const timeStr = d ? mmss(d) : "--:--";
 
                 return (
@@ -334,7 +400,8 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
                     onOpenMenu={() => setOpenMenuKey((k) => (k === t.s3Key ? null : t.s3Key))}
                     onCloseMenu={() => setOpenMenuKey(null)}
                     onPlay={() => {
-                      onPickTrack?.({ tracks, index: i }); // global player
+                      // uses global bottom player (do not modify BottomPlayer itself)
+                      onPickTrack?.({ tracks, index: i });
                       setOpenMenuKey(null);
                     }}
                     onLyrics={() => {
@@ -370,6 +437,17 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
           )}
         </Modal>
       ) : null}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 10, padding: "6px 0" }}>
+      <div style={{ opacity: 0.75, fontWeight: 900 }}>{label}</div>
+      <div style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {String(value || "—")}
+      </div>
     </div>
   );
 }
@@ -468,57 +546,6 @@ function MenuItem({ label, onClick, accent }) {
   );
 }
 
-const collectionRow = {
-  display: "flex",
-  gap: 10,
-  overflowX: "auto",
-  paddingBottom: 6,
-};
-
-const thumbCard = {
-  width: 120,
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(255,255,255,0.03)",
-  padding: 10,
-  color: "white",
-};
-
-const thumbImgWrap = {
-  width: "100%",
-  aspectRatio: "1 / 1",
-  borderRadius: 12,
-  overflow: "hidden",
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.12)",
-};
-
-const thumbImg = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-  display: "block",
-};
-
-const thumbPlaceholder = {
-  width: "100%",
-  height: "100%",
-  display: "grid",
-  placeItems: "center",
-  fontWeight: 900,
-  opacity: 0.7,
-};
-
-const thumbTitle = {
-  marginTop: 8,
-  fontWeight: 900,
-  fontSize: 12,
-  opacity: 0.9,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-
 const grid2col = {
   display: "grid",
   gridTemplateColumns: "1.25fr 0.85fr",
@@ -531,29 +558,4 @@ const card = {
   borderRadius: 16,
   padding: 14,
   background: "rgba(255,255,255,0.03)",
-};
-
-const coverWrap = {
-  width: "100%",
-  aspectRatio: "1 / 1",
-  borderRadius: 16,
-  overflow: "hidden",
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.12)",
-};
-
-const coverImg = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-  display: "block",
-};
-
-const coverPlaceholder = {
-  width: "100%",
-  height: "100%",
-  display: "grid",
-  placeItems: "center",
-  fontWeight: 900,
-  opacity: 0.7,
 };
