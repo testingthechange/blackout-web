@@ -1,3 +1,4 @@
+// src/App.jsx
 import { Routes, Route, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 
@@ -14,8 +15,9 @@ const BACKEND_BASE = (import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+
 
 async function fetchJson(url) {
   const r = await fetch(url, { cache: "no-store" });
-  if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
-  return await r.json();
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(j?.error || `HTTP ${r.status} ${url}`);
+  return j;
 }
 
 export default function App() {
@@ -63,10 +65,15 @@ export default function App() {
   const [idx, setIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // "album" | "smartBridge"
+  const [playerMode, setPlayerMode] = useState("album");
+
   const activeTrack = queue[idx] || null;
 
-  // show player always on Product + Account (Account must be full)
-  const playerVisible = loc.pathname.startsWith("/shop/product") || loc.pathname.startsWith("/account");
+  // show player on Product + Account
+  const onProductPage = loc.pathname.startsWith("/shop/product");
+  const onAccountPage = loc.pathname.startsWith("/account");
+  const playerVisible = onProductPage || onAccountPage;
 
   // Cache signed urls briefly per s3Key
   const signedCache = useMemo(() => new Map(), []);
@@ -85,12 +92,13 @@ export default function App() {
 
     const j = await fetchJson(`${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`);
     if (!j?.ok || !j.url) throw new Error("Failed to sign playback url");
+
     signedCache.set(s3Key, j.url);
     return { ...track, url: j.url };
   }
 
-  // Called by pages when user clicks play (user gesture)
-  async function setPlayContext({ tracks, index }) {
+  // Called by pages when user clicks a track title
+  async function setPlayContext({ tracks, index, mode }) {
     if (!Array.isArray(tracks) || !tracks.length) return;
 
     const i = Math.max(0, Math.min(Number(index || 0), tracks.length - 1));
@@ -100,6 +108,8 @@ export default function App() {
     setQueue(nextQueue);
     setIdx(i);
     setIsPlaying(true);
+
+    if (mode === "album" || mode === "smartBridge") setPlayerMode(mode);
   }
 
   async function goPrev() {
@@ -121,9 +131,6 @@ export default function App() {
     setIdx(nextI);
     setIsPlaying(true);
   }
-
-  const playerMode = loc.pathname.startsWith("/account") ? "full" : "preview";
-  const previewSeconds = playerMode === "preview" ? 30 : null;
 
   const shopHref = `/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${
     qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
@@ -182,7 +189,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* STATUS ROW (moved away from Login/Search) */}
+        {/* STATUS ROW */}
         <div style={statusRow}>
           <div>
             Backend:{" "}
@@ -224,19 +231,40 @@ export default function App() {
         </Routes>
       </div>
 
-      {/* PLAYER: shown on Product + Account. Account is FULL mode. */}
+      {/* PLAYER: visible on Product + Account; Product is preview=30s, Account is full (no previewSeconds prop) */}
       {playerVisible ? (
-        <BottomPlayer
-          mode={playerMode}
-          track={activeTrack}
-          queue={queue}
-          index={idx}
-          isPlaying={isPlaying}
-          onPlayPause={setIsPlaying}
-          onPrev={goPrev}
-          onNext={goNext}
-          previewSeconds={previewSeconds}
-        />
+        activeTrack?.url ? (
+          <BottomPlayer
+            mode={playerMode}
+            track={activeTrack}
+            queue={queue}
+            index={idx}
+            isPlaying={isPlaying}
+            onPlayPause={setIsPlaying}
+            onPrev={goPrev}
+            onNext={goNext}
+            {...(onProductPage ? { previewSeconds: 30 } : {})}
+          />
+        ) : (
+          <div
+            style={{
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 86,
+              background: "rgba(0,0,0,0.35)",
+              borderTop: "1px solid rgba(255,255,255,0.10)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "rgba(255,255,255,0.75)",
+              fontWeight: 900,
+            }}
+          >
+            Select a track to play
+          </div>
+        )
       ) : null}
     </div>
   );

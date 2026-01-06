@@ -1,3 +1,4 @@
+// src/pages/MyAccount.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 
 function mmss(seconds) {
@@ -5,15 +6,6 @@ function mmss(seconds) {
   const m = Math.floor(s / 60);
   const r = String(s % 60).padStart(2, "0");
   return `${m}:${r}`;
-}
-
-function sumSeconds(values) {
-  let total = 0;
-  for (const v of values) {
-    const n = Number(v || 0);
-    if (Number.isFinite(n) && n > 0) total += n;
-  }
-  return total;
 }
 
 function Modal({ title, children, onClose }) {
@@ -76,8 +68,6 @@ function useOutsideClose(ref, onClose) {
 }
 
 export default function MyAccount({ backendBase, shareId, onPickTrack }) {
-  const green = "#22c55e";
-
   const [status, setStatus] = useState("idle"); // idle | missing-env | missing-shareid | loading | ok | fail
   const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState(null);
@@ -88,14 +78,19 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   // modal
   const [modal, setModal] = useState(null); // { type: "lyrics"|"credits", track }
 
-  // durations (s3Key -> seconds) for showing total time + per track time
+  // play mode (album | smartBridge)
+  const [playMode, setPlayMode] = useState("album");
+
+  // durations: s3Key -> seconds
   const [durByKey, setDurByKey] = useState(() => new Map());
-  // signed url cache per s3Key (only for metadata probing)
+  // signed url cache per s3Key (only for metadata probing + cover)
   const [signedByKey, setSignedByKey] = useState(() => new Map());
 
-  // mini-nav tabs (Card 2, middle)
-  const tabs = ["My Collection", "Playlist", "Swag", "Other"];
-  const [activeTab, setActiveTab] = useState(tabs[0]);
+  // cover url (signed if needed)
+  const [coverUrl, setCoverUrl] = useState("");
+
+  // mini-nav (local UI only)
+  const [miniTab, setMiniTab] = useState("my-collection");
 
   // --- Load manifest (published) ---
   useEffect(() => {
@@ -138,9 +133,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
       slot: Number(t.slot || i + 1),
       title: String(t.title || "").trim() || "Untitled",
       s3Key: String(t.s3Key || "").trim(),
-
-      // optional fields you may add later in publish manifest:
-      durationSec: Number(t.durationSec || 0),
+      durationSec: Number(t.durationSec || 0), // if you later publish it
       lyrics: t.lyrics,
       credits: t.credits,
       lyricsText: t.lyricsText,
@@ -148,7 +141,19 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     }));
   }, [manifest]);
 
-  // --- Sign a single s3Key on demand (for metadata probe only) ---
+  // collection bar (for now: single published album)
+  const collection = useMemo(() => {
+    if (!shareId) return [];
+    return [
+      {
+        shareId,
+        title: String(manifest?.albumName || "Album"),
+        coverUrl,
+      },
+    ];
+  }, [shareId, manifest?.albumName, coverUrl]);
+
+  // --- Sign a single s3Key on demand (for metadata probe + cover) ---
   async function signIfNeeded(s3Key) {
     const key = String(s3Key || "").trim();
     if (!key) return null;
@@ -156,11 +161,9 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     const cached = signedByKey.get(key);
     if (cached) return cached;
 
-    const r = await fetch(`${backendBase}/api/playback-url?s3Key=${encodeURIComponent(key)}`, {
-      cache: "no-store",
-    });
+    const r = await fetch(`${backendBase}/api/playback-url?s3Key=${encodeURIComponent(key)}`, { cache: "no-store" });
     const j = await r.json().catch(() => null);
-    if (!r.ok || !j?.ok || !j?.url) throw new Error(j?.error || "Failed to sign playback url");
+    if (!r.ok || !j?.ok || !j?.url) throw new Error(j?.error || "Failed to sign url");
 
     setSignedByKey((prev) => {
       const next = new Map(prev);
@@ -223,7 +226,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
         try {
           await ensureDuration(t);
         } catch {
-          // ignore; UI shows --:--
+          // ignore; show --:--
         }
       }
     })();
@@ -233,6 +236,41 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tracks.length, backendBase]);
+
+  // cover: prefer manifest.coverUrl, else sign manifest.coverS3Key (if present)
+  useEffect(() => {
+    if (!manifest?.ok) return;
+
+    const direct = String(manifest?.coverUrl || "").trim();
+    const coverKey = String(manifest?.coverS3Key || "").trim();
+
+    if (direct) {
+      setCoverUrl(direct);
+      return;
+    }
+
+    if (!backendBase || !coverKey) {
+      setCoverUrl("");
+      return;
+    }
+
+    let alive = true;
+    (async () => {
+      try {
+        const url = await signIfNeeded(coverKey);
+        if (!alive) return;
+        setCoverUrl(url || "");
+      } catch {
+        if (!alive) return;
+        setCoverUrl("");
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manifest?.ok, manifest?.coverUrl, manifest?.coverS3Key, backendBase]);
 
   // ---- Meta getters (ready for incoming snapshot meta) ----
   function getLyrics(track) {
@@ -249,24 +287,22 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     );
   }
 
-  // ---- Album info (Card 1, right column) ----
-  const albumName =
-    String(manifest?.albumName || manifest?.title || manifest?.albumTitle || "").trim() || "—";
-  const artist =
-    String(manifest?.artist || manifest?.performers || manifest?.performer || "").trim() || "—";
-  const releaseDate =
-    String(manifest?.releaseDate || manifest?.releasedAt || manifest?.publishedAt || "").trim() || "—";
+  // album meta for card
+  const albumName = String(manifest?.albumName || "—");
+  const performers = String(manifest?.performers || "—");
+  const releaseDate = String(manifest?.releaseDate || "—");
 
-  const totalSeconds = useMemo(() => {
-    const secs = tracks.map((t) => durByKey.get(t.s3Key) || t.durationSec || 0);
-    return sumSeconds(secs);
+  const totalSec = useMemo(() => {
+    let sum = 0;
+    for (const t of tracks) {
+      const key = t.s3Key;
+      const d = durByKey.get(key) || t.durationSec || 0;
+      if (Number.isFinite(d) && d > 0) sum += d;
+    }
+    return sum;
   }, [tracks, durByKey]);
 
-  const totalTime = totalSeconds ? mmss(totalSeconds) : "—";
-
-  // ---- Cover (left column only) ----
-  const coverUrl =
-    String(manifest?.coverUrl || manifest?.coverImageUrl || manifest?.artworkUrl || "").trim() || "";
+  const totalTime = totalSec > 0 ? mmss(totalSec) : "—";
 
   // --- UI states ---
   if (status === "missing-env") {
@@ -303,92 +339,189 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
 
   if (!manifest) return <div style={{ padding: 16 }}>Loading…</div>;
 
+  const green = "#22c55e";
+
   return (
     <div style={{ padding: 16 }}>
-      {/* layout locked: 2 columns */}
+      {/* keyframes for subtle mode indicator */}
+      <style>{`
+        @keyframes pulse {
+          0% { transform: scale(1); opacity: 0.85; }
+          50% { transform: scale(1.55); opacity: 1; }
+          100% { transform: scale(1); opacity: 0.85; }
+        }
+      `}</style>
+
+      {/* My Collection thumbnail bar */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>My Collection</div>
+        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
+          {collection.map((it) => (
+            <button
+              key={it.shareId}
+              onClick={() => (window.location.href = `/account?shareId=${encodeURIComponent(it.shareId)}`)}
+              style={{
+                width: 96,
+                flex: "0 0 auto",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.04)",
+                padding: 8,
+                cursor: "pointer",
+                color: "white",
+              }}
+              aria-label={`Open album ${it.shareId}`}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  aspectRatio: "1 / 1",
+                  borderRadius: 10,
+                  overflow: "hidden",
+                  background: "rgba(0,0,0,0.25)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                {it.coverUrl ? (
+                  <img src={it.coverUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", opacity: 0.7, fontWeight: 900 }}>
+                    —
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 11, opacity: 0.85, textAlign: "left", fontWeight: 900 }}>
+                {it.title}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 2-column layout */}
       <div style={grid2col}>
-        {/* LEFT column: album cover only */}
+        {/* LEFT column: ONE card ONLY (album cover) */}
         <div>
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Cover</div>
-
             <div
               style={{
                 width: "100%",
                 aspectRatio: "1 / 1",
-                borderRadius: 14,
+                borderRadius: 16,
                 overflow: "hidden",
+                background: "rgba(0,0,0,0.22)",
                 border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(255,255,255,0.04)",
-                display: "grid",
-                placeItems: "center",
               }}
             >
               {coverUrl ? (
-                <img
-                  src={coverUrl}
-                  alt="Album cover"
-                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                />
+                <img src={coverUrl} alt="Album cover" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : (
-                <div style={{ opacity: 0.75, fontWeight: 800 }}>Cover image pending</div>
+                <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", opacity: 0.8, fontWeight: 900 }}>
+                  Cover image pending
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* RIGHT column: 3 stacked cards */}
-        <div style={{ display: "grid", gap: 12 }}>
-          {/* Card 1: Album info (replaces Membership) */}
+        {/* RIGHT column: cards */}
+        <div style={{ display: "grid", gap: 12, alignItems: "start" }}>
+          {/* Card 1: album info */}
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Album</div>
 
-            <InfoRow label="Album name" value={albumName} />
-            <InfoRow label="Artist" value={artist} />
-            <InfoRow label="Release date" value={releaseDate} />
-            <InfoRow label="Total time" value={totalTime} />
-          </div>
-
-          {/* Card 2 (middle): Mini-nav tabs */}
-          <div style={card}>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {tabs.map((t) => {
-                const active = t === activeTab;
-                return (
-                  <button
-                    key={t}
-                    onClick={() => setActiveTab(t)}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.16)",
-                      background: active ? "rgba(34,197,94,0.18)" : "rgba(255,255,255,0.06)",
-                      color: "white",
-                      fontWeight: 900,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span style={{ color: active ? green : "white" }}>{t}</span>
-                  </button>
-                );
-              })}
+            <div style={kvRow}>
+              <div style={kvKey}>Album name</div>
+              <div style={kvVal}>{albumName}</div>
             </div>
 
-            <div style={{ marginTop: 12, opacity: 0.9 }}>
-              {activeTab === "My Collection" && <div style={{ fontWeight: 800 }}>My Collection (placeholder)</div>}
-              {activeTab === "Playlist" && <div style={{ fontWeight: 800 }}>Playlist (placeholder)</div>}
-              {activeTab === "Swag" && <div style={{ fontWeight: 800 }}>Swag (placeholder)</div>}
-              {activeTab === "Other" && <div style={{ fontWeight: 800 }}>Other (placeholder)</div>}
+            <div style={kvRow}>
+              <div style={kvKey}>Artist</div>
+              <div style={kvVal}>{performers}</div>
+            </div>
+
+            <div style={kvRow}>
+              <div style={kvKey}>Release date</div>
+              <div style={kvVal}>{releaseDate}</div>
+            </div>
+
+            <div style={kvRow}>
+              <div style={kvKey}>Total time</div>
+              <div style={kvVal}>{totalTime}</div>
             </div>
           </div>
 
-          {/* Card 3: Tracks (at bottom of right column) */}
+          {/* Card 2: play mode (radio) */}
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracks</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+              <div style={{ fontWeight: 900 }}>Play mode</div>
+
+              {/* subtle animated indicator (2 dots) */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: playMode === "album" ? green : "rgba(255,255,255,0.25)",
+                    animation: playMode === "album" ? "pulse 1.2s infinite" : "none",
+                  }}
+                />
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: playMode === "smartBridge" ? green : "rgba(255,255,255,0.25)",
+                    animation: playMode === "smartBridge" ? "pulse 1.2s infinite" : "none",
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 10, display: "flex", gap: 14, alignItems: "center" }}>
+              <label style={radioLabel}>
+                <input
+                  type="radio"
+                  name="playMode"
+                  checked={playMode === "album"}
+                  onChange={() => setPlayMode("album")}
+                />
+                Album
+              </label>
+
+              <label style={radioLabel}>
+                <input
+                  type="radio"
+                  name="playMode"
+                  checked={playMode === "smartBridge"}
+                  onChange={() => setPlayMode("smartBridge")}
+                />
+                Smart Bridge
+              </label>
+            </div>
+          </div>
+
+          {/* Card 3: mini nav */}
+          <div style={card}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <MiniTab label="My collection" active={miniTab === "my-collection"} onClick={() => setMiniTab("my-collection")} />
+              <MiniTab label="Playlist" active={miniTab === "playlist"} onClick={() => setMiniTab("playlist")} />
+              <MiniTab label="Swag" active={miniTab === "swag"} onClick={() => setMiniTab("swag")} />
+              <MiniTab label="Other" active={miniTab === "other"} onClick={() => setMiniTab("other")} />
+            </div>
+          </div>
+
+          {/* Card 4: tracks (song title click plays) */}
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Tracks</div>
+            <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 10 }}>
+              Click a song title to play.
+            </div>
 
             <div style={{ display: "grid", gap: 8 }}>
               {tracks.map((t, i) => {
-                const d = durByKey.get(t.s3Key) || t.durationSec || 0;
+                const d = durByKey.get(t.s3Key) || 0;
                 const timeStr = d ? mmss(d) : "--:--";
 
                 return (
@@ -399,9 +532,12 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
                     isMenuOpen={openMenuKey === t.s3Key}
                     onOpenMenu={() => setOpenMenuKey((k) => (k === t.s3Key ? null : t.s3Key))}
                     onCloseMenu={() => setOpenMenuKey(null)}
-                    onPlay={() => {
-                      // uses global bottom player (do not modify BottomPlayer itself)
-                      onPickTrack?.({ tracks, index: i });
+                    onTitleClick={() => {
+                      onPickTrack?.({ tracks, index: i, mode: playMode });
+                      setOpenMenuKey(null);
+                    }}
+                    onAddToPlaylist={() => {
+                      // stub; keep
                       setOpenMenuKey(null);
                     }}
                     onLyrics={() => {
@@ -428,11 +564,11 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
         >
           {modal.type === "lyrics" ? (
             <pre style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.35, opacity: 0.92 }}>
-              {getLyrics(modal.track) || "Lyrics pending (will populate from published snapshot meta)."}
+              {getLyrics(modal.track) || "Lyrics pending."}
             </pre>
           ) : (
             <pre style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.35, opacity: 0.92 }}>
-              {getCredits(modal.track) || "Credits pending (will populate from published snapshot meta)."}
+              {getCredits(modal.track) || "Credits pending."}
             </pre>
           )}
         </Modal>
@@ -441,18 +577,37 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   );
 }
 
-function InfoRow({ label, value }) {
+function MiniTab({ label, active, onClick }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 10, padding: "6px 0" }}>
-      <div style={{ opacity: 0.75, fontWeight: 900 }}>{label}</div>
-      <div style={{ fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {String(value || "—")}
-      </div>
-    </div>
+    <button
+      onClick={onClick}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.14)",
+        background: active ? "rgba(34,197,94,0.18)" : "rgba(255,255,255,0.06)",
+        color: "white",
+        fontWeight: 900,
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
-function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay, onLyrics, onCredits, accent }) {
+function TrackRow({
+  track,
+  timeStr,
+  isMenuOpen,
+  onOpenMenu,
+  onCloseMenu,
+  onTitleClick,
+  onAddToPlaylist,
+  onLyrics,
+  onCredits,
+  accent,
+}) {
   const menuRef = useRef(null);
   useOutsideClose(menuRef, () => {
     if (isMenuOpen) onCloseMenu?.();
@@ -472,8 +627,19 @@ function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay,
     >
       <div style={{ width: 26, opacity: 0.7, fontWeight: 900 }}>{track.slot}</div>
 
+      {/* TITLE CLICK PLAYS */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <div
+          onClick={onTitleClick}
+          style={{
+            fontWeight: 900,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            cursor: "pointer",
+          }}
+          title="Play"
+        >
           {track.title} <span style={{ opacity: 0.72, fontWeight: 800 }}>({timeStr})</span>
         </div>
       </div>
@@ -514,7 +680,7 @@ function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay,
               zIndex: 50,
             }}
           >
-            <MenuItem label="Play" onClick={onPlay} accent={accent} />
+            <MenuItem label="Add to playlist" onClick={onAddToPlaylist} accent={accent} />
             <MenuItem label="Lyrics" onClick={onLyrics} accent={accent} />
             <MenuItem label="Credits" onClick={onCredits} accent={accent} />
           </div>
@@ -548,7 +714,7 @@ function MenuItem({ label, onClick, accent }) {
 
 const grid2col = {
   display: "grid",
-  gridTemplateColumns: "1.25fr 0.85fr",
+  gridTemplateColumns: "1.15fr 0.85fr",
   gap: 12,
   alignItems: "start",
 };
@@ -558,4 +724,23 @@ const card = {
   borderRadius: 16,
   padding: 14,
   background: "rgba(255,255,255,0.03)",
+};
+
+const kvRow = {
+  display: "grid",
+  gridTemplateColumns: "120px 1fr",
+  gap: 10,
+  padding: "6px 0",
+  borderBottom: "1px solid rgba(255,255,255,0.06)",
+};
+
+const kvKey = { opacity: 0.8, fontWeight: 900, fontSize: 12 };
+const kvVal = { fontWeight: 900 };
+
+const radioLabel = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  fontWeight: 900,
+  cursor: "pointer",
 };
