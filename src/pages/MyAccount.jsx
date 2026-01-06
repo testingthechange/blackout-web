@@ -1,5 +1,6 @@
 // src/pages/MyAccount.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 function mmss(seconds) {
   const s = Math.max(0, Math.floor(Number(seconds || 0)));
@@ -72,12 +73,18 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState(null);
 
+  // 3-dot menu
   const [openMenuKey, setOpenMenuKey] = useState(null);
+
+  // modal
   const [modal, setModal] = useState(null); // { type: "lyrics"|"credits", track }
 
+  // durations: s3Key -> seconds
   const [durByKey, setDurByKey] = useState(() => new Map());
+  // signed url cache per s3Key (only for metadata probing)
   const [signedByKey, setSignedByKey] = useState(() => new Map());
 
+  // --- Load manifest (published) ---
   useEffect(() => {
     if (!backendBase) {
       setStatus("missing-env");
@@ -118,7 +125,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
       slot: Number(t.slot || i + 1),
       title: String(t.title || "").trim() || "Untitled",
       s3Key: String(t.s3Key || "").trim(),
-      durationSec: Number(t.durationSec || 0),
+      durationSec: Number(t.durationSec || 0), // if you later publish it
       lyrics: t.lyrics,
       credits: t.credits,
       lyricsText: t.lyricsText,
@@ -126,6 +133,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     }));
   }, [manifest]);
 
+  // --- Sign a single s3Key on demand (for metadata probe) ---
   async function signIfNeeded(s3Key) {
     const key = String(s3Key || "").trim();
     if (!key) return null;
@@ -186,6 +194,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     });
   }
 
+  // prime durations (small N ok)
   useEffect(() => {
     if (!backendBase) return;
     if (!tracks.length) return;
@@ -196,7 +205,9 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
         if (!alive) return;
         try {
           await ensureDuration(t);
-        } catch {}
+        } catch {
+          // ignore; show --:--
+        }
       }
     })();
 
@@ -206,6 +217,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tracks.length, backendBase]);
 
+  // ---- Meta getters (ready for incoming snapshot meta) ----
   function getLyrics(track) {
     return (
       String(track?.lyricsText || track?.lyrics || "") ||
@@ -220,6 +232,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     );
   }
 
+  // --- UI states ---
   if (status === "missing-env") {
     return (
       <div style={{ padding: 16 }}>
@@ -256,66 +269,56 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
 
   const green = "#22c55e";
 
-  // try to support future manifest cover fields if you add them
-  const coverUrl =
-    String(manifest?.coverUrl || "") ||
-    String(manifest?.albumCoverUrl || "") ||
-    "";
+  // cover (best-effort fields; will show placeholder if missing)
+  const coverUrl = String(manifest.coverUrl || "");
+  const coverTitle = String(manifest.albumName || manifest.title || "Album");
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 10 }}>Account</div>
-
-      {/* Collection bar (unchanged) */}
-      <div style={collectionBar}>
+      {/* My Collection bar (above 2-col layout) */}
+      <div style={{ marginBottom: 12 }}>
         <div style={{ fontWeight: 900, marginBottom: 8 }}>My Collection</div>
-        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
-          <AlbumThumb title="Block Radius" active />
-          <AlbumThumb title="Album 2" />
-          <AlbumThumb title="Album 3" />
+        <div style={collectionRow}>
+          <Link to={`/shop/product/${encodeURIComponent(shareId)}`} style={{ textDecoration: "none" }}>
+            <div style={thumbCard}>
+              <div style={thumbImgWrap}>
+                {coverUrl ? (
+                  <img src={coverUrl} alt="Album cover" style={thumbImg} />
+                ) : (
+                  <div style={thumbPlaceholder}>Cover</div>
+                )}
+              </div>
+              <div style={thumbTitle} title={coverTitle}>
+                {coverTitle}
+              </div>
+            </div>
+          </Link>
         </div>
       </div>
 
-      {/* 2-column cards */}
+      {/* 2-column layout (LOCKED) */}
       <div style={grid2col}>
-        {/* LEFT column: ONLY ONE CARD (album cover) */}
+        {/* LEFT column (only album cover card) */}
         <div>
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Album Cover</div>
-            <div
-              style={{
-                width: "100%",
-                aspectRatio: "1 / 1",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.04)",
-                overflow: "hidden",
-                display: "grid",
-                placeItems: "center",
-              }}
-            >
+            <div style={coverWrap}>
               {coverUrl ? (
-                <img
-                  src={coverUrl}
-                  alt="Album cover"
-                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                />
+                <img src={coverUrl} alt="Album cover" style={coverImg} />
               ) : (
-                <div style={{ opacity: 0.75, fontWeight: 900 }}>Cover image pending</div>
+                <div style={coverPlaceholder}>Cover image pending</div>
               )}
             </div>
           </div>
         </div>
 
-        {/* RIGHT column (keep structure): tracks card bottom-right */}
+        {/* RIGHT column: keep structure; Tracks card at bottom-right */}
         <div style={{ display: "grid", gap: 12 }}>
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Membership</div>
-            <div style={{ opacity: 0.85, fontSize: 13 }}>Wallet/NFT access and perks. (Placeholder)</div>
-          </div>
+          <div style={{ height: 1 }} />
 
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracks</div>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Tracks</div>
+            <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 10 }}>Use ⋯ for Lyrics / Credits.</div>
 
             <div style={{ display: "grid", gap: 8 }}>
               {tracks.map((t, i) => {
@@ -331,7 +334,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
                     onOpenMenu={() => setOpenMenuKey((k) => (k === t.s3Key ? null : t.s3Key))}
                     onCloseMenu={() => setOpenMenuKey(null)}
                     onPlay={() => {
-                      onPickTrack?.({ tracks, index: i });
+                      onPickTrack?.({ tracks, index: i }); // global player
                       setOpenMenuKey(null);
                     }}
                     onLyrics={() => {
@@ -371,26 +374,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   );
 }
 
-function AlbumThumb({ title, active }) {
-  return (
-    <div
-      style={{
-        minWidth: 120,
-        height: 70,
-        borderRadius: 14,
-        border: active ? "1px solid rgba(34,197,94,0.55)" : "1px solid rgba(255,255,255,0.12)",
-        background: active ? "rgba(34,197,94,0.10)" : "rgba(255,255,255,0.04)",
-        display: "grid",
-        placeItems: "center",
-        fontWeight: 900,
-        opacity: active ? 1 : 0.85,
-      }}
-    >
-      {title}
-    </div>
-  );
-}
-
 function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay, onLyrics, onCredits, accent }) {
   const menuRef = useRef(null);
   useOutsideClose(menuRef, () => {
@@ -411,27 +394,13 @@ function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay,
     >
       <div style={{ width: 26, opacity: 0.7, fontWeight: 900 }}>{track.slot}</div>
 
-      <button
-        onClick={onPlay}
-        style={{
-          flex: 1,
-          minWidth: 0,
-          textAlign: "left",
-          border: "none",
-          background: "transparent",
-          color: "white",
-          cursor: "pointer",
-          padding: 0,
-          fontWeight: 900,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-        title={track.title}
-      >
-        {track.title} <span style={{ opacity: 0.72, fontWeight: 800 }}>({timeStr})</span>
-      </button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {track.title} <span style={{ opacity: 0.72, fontWeight: 800 }}>({timeStr})</span>
+        </div>
+      </div>
 
+      {/* 3-dot menu */}
       <div style={{ position: "relative" }} ref={menuRef}>
         <button
           onClick={onOpenMenu}
@@ -467,6 +436,7 @@ function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay,
               zIndex: 50,
             }}
           >
+            <MenuItem label="Play" onClick={onPlay} accent={accent} />
             <MenuItem label="Lyrics" onClick={onLyrics} accent={accent} />
             <MenuItem label="Credits" onClick={onCredits} accent={accent} />
           </div>
@@ -498,12 +468,55 @@ function MenuItem({ label, onClick, accent }) {
   );
 }
 
-const collectionBar = {
+const collectionRow = {
+  display: "flex",
+  gap: 10,
+  overflowX: "auto",
+  paddingBottom: 6,
+};
+
+const thumbCard = {
+  width: 120,
+  borderRadius: 14,
   border: "1px solid rgba(255,255,255,0.10)",
-  borderRadius: 16,
-  padding: 14,
   background: "rgba(255,255,255,0.03)",
-  marginBottom: 12,
+  padding: 10,
+  color: "white",
+};
+
+const thumbImgWrap = {
+  width: "100%",
+  aspectRatio: "1 / 1",
+  borderRadius: 12,
+  overflow: "hidden",
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(0,0,0,0.12)",
+};
+
+const thumbImg = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  display: "block",
+};
+
+const thumbPlaceholder = {
+  width: "100%",
+  height: "100%",
+  display: "grid",
+  placeItems: "center",
+  fontWeight: 900,
+  opacity: 0.7,
+};
+
+const thumbTitle = {
+  marginTop: 8,
+  fontWeight: 900,
+  fontSize: 12,
+  opacity: 0.9,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const grid2col = {
@@ -518,4 +531,29 @@ const card = {
   borderRadius: 16,
   padding: 14,
   background: "rgba(255,255,255,0.03)",
+};
+
+const coverWrap = {
+  width: "100%",
+  aspectRatio: "1 / 1",
+  borderRadius: 16,
+  overflow: "hidden",
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(0,0,0,0.12)",
+};
+
+const coverImg = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  display: "block",
+};
+
+const coverPlaceholder = {
+  width: "100%",
+  height: "100%",
+  display: "grid",
+  placeItems: "center",
+  fontWeight: 900,
+  opacity: 0.7,
 };

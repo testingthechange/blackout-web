@@ -48,7 +48,7 @@ export default function App() {
       .catch(() => setBackendStatus("fail"));
   }, []);
 
-  // ---------- GLOBAL SEARCH ----------
+  // ---------- GLOBAL SEARCH (UI under Login, top-right) ----------
   const [searchDraft, setSearchDraft] = useState(qParam);
   useEffect(() => setSearchDraft(qParam), [qParam]);
 
@@ -66,15 +66,10 @@ export default function App() {
 
   const activeTrack = queue[idx] || null;
 
-  const onProductPage = loc.pathname.startsWith("/shop/product");
-  const onAccountPage = loc.pathname.startsWith("/account");
-
-  // SHOW PLAYER on Product + Account
-  const playerVisible = onProductPage || onAccountPage;
-
-  // Product = preview, Account = full
-  const playerMode = onAccountPage ? "full" : "preview";
-  const playerPreviewSeconds = onAccountPage ? undefined : 30;
+  // show player on Product + Account pages
+  const isProductPage = loc.pathname.startsWith("/shop/product");
+  const isAccountPage = loc.pathname.startsWith("/account");
+  const playerVisible = isProductPage || isAccountPage;
 
   // Cache signed urls briefly per s3Key
   const signedCache = useMemo(() => new Map(), []);
@@ -97,7 +92,7 @@ export default function App() {
     return { ...track, url: j.url };
   }
 
-  // Called by pages when user clicks play
+  // Called by pages when user clicks play (user gesture)
   async function setPlayContext({ tracks, index }) {
     if (!Array.isArray(tracks) || !tracks.length) return;
 
@@ -130,6 +125,9 @@ export default function App() {
     setIsPlaying(true);
   }
 
+  // Product = preview; Account = full
+  const playerMode = isAccountPage ? "full" : "preview";
+
   const shopHref = `/shop${shareId ? `?shareId=${encodeURIComponent(shareId)}` : ""}${
     qParam ? `${shareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
   }`;
@@ -140,23 +138,31 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 120px" }}>
-        {/* HEADER */}
+        {/* HEADER: left brand, centered nav, right login + search under it */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "start", gap: 12 }}>
           <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Block Radius</div>
 
           <div style={{ display: "flex", justifyContent: "center", gap: 18, paddingTop: 2 }}>
-            <Link to="/" style={navLink}>Home</Link>
-            <Link to={shopHref} style={navLink}>Shop</Link>
-            <Link to={accountHref} style={navLink}>Account</Link>
+            <Link to="/" style={navLink}>
+              Home
+            </Link>
+            <Link to={shopHref} style={navLink}>
+              Shop
+            </Link>
+            <Link to={accountHref} style={navLink}>
+              Account
+            </Link>
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <div style={{ width: 320 }}>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <Link to="/login" style={loginLink}>Login</Link>
+                <Link to="/login" style={loginLink}>
+                  Login
+                </Link>
               </div>
 
-              {/* GLOBAL SEARCH */}
+              {/* GLOBAL SEARCH (under login) */}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -171,13 +177,15 @@ export default function App() {
                   placeholder="Search"
                   style={searchInput}
                 />
-                <button type="submit" style={searchBtn}>Search</button>
+                <button type="submit" style={searchBtn}>
+                  Search
+                </button>
               </form>
             </div>
           </div>
         </div>
 
-        {/* STATUS ROW */}
+        {/* STATUS ROW (moved away from Login/Search) */}
         <div style={statusRow}>
           <div>
             Backend:{" "}
@@ -192,7 +200,12 @@ export default function App() {
         {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />} />
+
+          <Route
+            path="/shop"
+            element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
+          />
+
           <Route
             path="/shop/product/:shareId"
             element={
@@ -203,16 +216,18 @@ export default function App() {
               />
             }
           />
+
           <Route
             path="/account"
             element={<MyAccount backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
           />
+
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
         </Routes>
       </div>
 
-      {/* PLAYER: shown on Product + Account */}
+      {/* PLAYER: shown on Product + Account pages */}
       {playerVisible ? (
         <BottomPlayer
           mode={playerMode}
@@ -223,7 +238,7 @@ export default function App() {
           onPlayPause={setIsPlaying}
           onPrev={goPrev}
           onNext={goNext}
-          {...(playerPreviewSeconds ? { previewSeconds: playerPreviewSeconds } : {})}
+          {...(playerMode === "preview" ? { previewSeconds: 30 } : {})}
         />
       ) : null}
     </div>
