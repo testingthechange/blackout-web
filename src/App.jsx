@@ -227,7 +227,11 @@ export default function App() {
               />
             }
           />
-          <Route path="/account" element={<MyAccount backendBase={BACKEND_BASE} shareId={shareId} />} />
+        <Route
+          path="/account"
+          element={<MyAccount backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
+/>
+
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
         </Routes>

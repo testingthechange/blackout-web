@@ -1,4 +1,3 @@
-// src/pages/MyAccount.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 
 function mmss(seconds) {
@@ -72,8 +71,16 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState(null);
 
+  // 3-dot menu
   const [openMenuKey, setOpenMenuKey] = useState(null);
+
+  // modal
   const [modal, setModal] = useState(null); // { type: "lyrics"|"credits", track }
+
+  // (optional) durations: s3Key -> seconds
+  const [durByKey, setDurByKey] = useState(() => new Map());
+  // signed url cache per s3Key (only for metadata probing)
+  const [signedByKey, setSignedByKey] = useState(() => new Map());
 
   // --- Load manifest (published) ---
   useEffect(() => {
@@ -109,7 +116,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
       });
   }, [backendBase, shareId]);
 
-  // Tracks for Account page + global player
   const tracks = useMemo(() => {
     if (!manifest?.ok) return [];
     return manifest.tracks.map((t, i) => ({
@@ -117,17 +123,98 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
       slot: Number(t.slot || i + 1),
       title: String(t.title || "").trim() || "Untitled",
       s3Key: String(t.s3Key || "").trim(),
-
-      // Optional: if your publish step includes it later
-      durationSec: Number(t.durationSec || 0),
-
-      // Future meta fields (support multiple possible keys)
+      durationSec: Number(t.durationSec || 0), // if you later publish it
       lyrics: t.lyrics,
       credits: t.credits,
       lyricsText: t.lyricsText,
       creditsText: t.creditsText,
     }));
   }, [manifest]);
+
+  // --- Sign a single s3Key on demand (for metadata probe) ---
+  async function signIfNeeded(s3Key) {
+    const key = String(s3Key || "").trim();
+    if (!key) return null;
+
+    const cached = signedByKey.get(key);
+    if (cached) return cached;
+
+    const r = await fetch(`${backendBase}/api/playback-url?s3Key=${encodeURIComponent(key)}`, { cache: "no-store" });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j?.ok || !j?.url) throw new Error(j?.error || "Failed to sign playback url");
+
+    setSignedByKey((prev) => {
+      const next = new Map(prev);
+      next.set(key, j.url);
+      return next;
+    });
+
+    return j.url;
+  }
+
+  async function ensureDuration(track) {
+    const key = String(track?.s3Key || "").trim();
+    if (!key) return;
+
+    if (track?.durationSec && track.durationSec > 0) {
+      // if published, prefer it
+      setDurByKey((prev) => {
+        if (prev.get(key)) return prev;
+        const next = new Map(prev);
+        next.set(key, track.durationSec);
+        return next;
+      });
+      return;
+    }
+
+    if (durByKey.get(key)) return;
+
+    const url = await signIfNeeded(key);
+    if (!url) return;
+
+    await new Promise((resolve) => {
+      const a = new Audio();
+      a.preload = "metadata";
+      a.src = url;
+
+      const done = () => resolve();
+      a.addEventListener("loadedmetadata", () => {
+        const d = Number(a.duration || 0);
+        if (Number.isFinite(d) && d > 0) {
+          setDurByKey((prev) => {
+            const next = new Map(prev);
+            next.set(key, d);
+            return next;
+          });
+        }
+        done();
+      });
+      a.addEventListener("error", done);
+    });
+  }
+
+  // prime durations (small N ok)
+  useEffect(() => {
+    if (!backendBase) return;
+    if (!tracks.length) return;
+
+    let alive = true;
+    (async () => {
+      for (const t of tracks) {
+        if (!alive) return;
+        try {
+          await ensureDuration(t);
+        } catch {
+          // ignore; show --:--
+        }
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracks.length, backendBase]);
 
   // ---- Meta getters (ready for incoming snapshot meta) ----
   function getLyrics(track) {
@@ -185,45 +272,61 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
     <div style={{ padding: 16 }}>
       <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 10 }}>Account</div>
 
-      <div
-        style={{
-          border: "1px solid rgba(255,255,255,0.10)",
-          borderRadius: 16,
-          padding: 14,
-          background: "rgba(255,255,255,0.03)",
-        }}
-      >
-        <div style={{ fontWeight: 900, marginBottom: 10 }}>Your Album</div>
+      {/* 2-column layout (restored) */}
+      <div style={grid2col}>
+        {/* LEFT column (wider): tracks */}
+        <div>
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Your Album</div>
 
-        <div style={{ display: "grid", gap: 8 }}>
-          {tracks.map((t, i) => {
-            const timeStr = t.durationSec ? mmss(t.durationSec) : "--:--";
+            <div style={{ display: "grid", gap: 8 }}>
+              {tracks.map((t, i) => {
+                const d = durByKey.get(t.s3Key) || 0;
+                const timeStr = d ? mmss(d) : "--:--";
 
-            return (
-              <TrackRow
-                key={t.id}
-                track={t}
-                timeStr={timeStr}
-                isMenuOpen={openMenuKey === t.s3Key}
-                onOpenMenu={() => setOpenMenuKey((k) => (k === t.s3Key ? null : t.s3Key))}
-                onCloseMenu={() => setOpenMenuKey(null)}
-                onPlay={() => {
-                  // Use existing global player context (App.jsx)
-                  onPickTrack?.({ tracks, index: i });
-                  setOpenMenuKey(null);
-                }}
-                onLyrics={() => {
-                  setModal({ type: "lyrics", track: t });
-                  setOpenMenuKey(null);
-                }}
-                onCredits={() => {
-                  setModal({ type: "credits", track: t });
-                  setOpenMenuKey(null);
-                }}
-                accent={green}
-              />
-            );
-          })}
+                return (
+                  <TrackRow
+                    key={t.id}
+                    track={t}
+                    timeStr={timeStr}
+                    isMenuOpen={openMenuKey === t.s3Key}
+                    onOpenMenu={() => setOpenMenuKey((k) => (k === t.s3Key ? null : t.s3Key))}
+                    onCloseMenu={() => setOpenMenuKey(null)}
+                    onPlay={() => {
+                      onPickTrack?.({ tracks, index: i }); // global player
+                      setOpenMenuKey(null);
+                    }}
+                    onLyrics={() => {
+                      setModal({ type: "lyrics", track: t });
+                      setOpenMenuKey(null);
+                    }}
+                    onCredits={() => {
+                      setModal({ type: "credits", track: t });
+                      setOpenMenuKey(null);
+                    }}
+                    accent={green}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT column: placeholder panels (keeps 2-col structure) */}
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Library</div>
+            <div style={{ opacity: 0.8, fontSize: 13 }}>
+              Lyrics/Credits are available in the 3-dot menu per song.
+            </div>
+          </div>
+
+          <div style={card}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Meta (incoming)</div>
+            <div style={{ opacity: 0.8, fontSize: 13 }}>
+              Ready to consume published snapshot meta when you add it to the manifest.
+            </div>
+          </div>
         </div>
       </div>
 
@@ -240,7 +343,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
             <pre style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.35, opacity: 0.92 }}>
               {getCredits(modal.track) || "Credits pending (will populate from published snapshot meta)."}
             </pre>
-          )}
+          ) : null}
         </Modal>
       ) : null}
     </div>
@@ -273,6 +376,7 @@ function TrackRow({ track, timeStr, isMenuOpen, onOpenMenu, onCloseMenu, onPlay,
         </div>
       </div>
 
+      {/* 3-dot menu */}
       <div style={{ position: "relative" }} ref={menuRef}>
         <button
           onClick={onOpenMenu}
@@ -339,3 +443,17 @@ function MenuItem({ label, onClick, accent }) {
     </button>
   );
 }
+
+const grid2col = {
+  display: "grid",
+  gridTemplateColumns: "1.25fr 0.85fr",
+  gap: 12,
+  alignItems: "start",
+};
+
+const card = {
+  border: "1px solid rgba(255,255,255,0.10)",
+  borderRadius: 16,
+  padding: 14,
+  background: "rgba(255,255,255,0.03)",
+};
