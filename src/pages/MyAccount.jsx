@@ -1,73 +1,11 @@
 // src/pages/MyAccount.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getActiveShareId } from "../publish/getActiveShareId";
 
-function mmss(seconds) {
-  const s = Math.max(0, Math.floor(Number(seconds || 0)));
-  const m = Math.floor(s / 60);
-  const r = String(s % 60).padStart(2, "0");
-  return `${m}:${r}`;
-}
+export default function MyAccount({ backendBase: backendBaseProp, shareId: shareIdProp, onPickTrack }) {
+  const backendBase = backendBaseProp || import.meta.env.VITE_ALBUM_BACKEND_URL;
+  const shareId = useMemo(() => shareIdProp || getActiveShareId(), [shareIdProp]);
 
-function Modal({ title, children, onClose }) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-        zIndex: 1000,
-      }}
-      onMouseDown={onClose}
-    >
-      <div
-        style={{
-          width: "min(760px, 100%)",
-          background: "rgba(24,24,24,0.98)",
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 16,
-          padding: 16,
-        }}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
-          <button
-            onClick={onClose}
-            style={{
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.06)",
-              color: "white",
-              borderRadius: 10,
-              padding: "6px 10px",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            ✕
-          </button>
-        </div>
-        <div style={{ marginTop: 12 }}>{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function useOutsideClose(ref, onClose) {
-  useEffect(() => {
-    function onDown(e) {
-      if (!ref.current) return;
-      if (!ref.current.contains(e.target)) onClose?.();
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [ref, onClose]);
-}
-
-export default function MyAccount({ backendBase, shareId, onPickTrack }) {
   const [status, setStatus] = useState("idle"); // idle | missing-env | missing-shareid | loading | ok | fail
   const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState(null);
@@ -343,7 +281,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
 
   return (
     <div style={{ padding: 16 }}>
-      {/* keyframes for subtle mode indicator */}
       <style>{`
         @keyframes pulse {
           0% { transform: scale(1); opacity: 0.85; }
@@ -352,7 +289,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
         }
       `}</style>
 
-      {/* My Collection thumbnail bar */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontWeight: 900, marginBottom: 8 }}>My Collection</div>
         <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6 }}>
@@ -385,7 +321,16 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
                 {it.coverUrl ? (
                   <img src={it.coverUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 ) : (
-                  <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", opacity: 0.7, fontWeight: 900 }}>
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "grid",
+                      placeItems: "center",
+                      opacity: 0.7,
+                      fontWeight: 900,
+                    }}
+                  >
                     —
                   </div>
                 )}
@@ -398,9 +343,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
         </div>
       </div>
 
-      {/* 2-column layout */}
       <div style={grid2col}>
-        {/* LEFT column: ONE card ONLY (album cover) */}
         <div>
           <div style={card}>
             <div
@@ -416,7 +359,16 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
               {coverUrl ? (
                 <img src={coverUrl} alt="Album cover" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : (
-                <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", opacity: 0.8, fontWeight: 900 }}>
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "grid",
+                    placeItems: "center",
+                    opacity: 0.8,
+                    fontWeight: 900,
+                  }}
+                >
                   Cover image pending
                 </div>
               )}
@@ -424,9 +376,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
           </div>
         </div>
 
-        {/* RIGHT column: cards */}
         <div style={{ display: "grid", gap: 12, alignItems: "start" }}>
-          {/* Card 1: album info */}
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Album</div>
 
@@ -451,12 +401,10 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
             </div>
           </div>
 
-          {/* Card 2: play mode (radio) */}
           <div style={card}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
               <div style={{ fontWeight: 900 }}>Play mode</div>
 
-              {/* subtle animated indicator (2 dots) */}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span
                   style={{
@@ -481,12 +429,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
 
             <div style={{ marginTop: 10, display: "flex", gap: 14, alignItems: "center" }}>
               <label style={radioLabel}>
-                <input
-                  type="radio"
-                  name="playMode"
-                  checked={playMode === "album"}
-                  onChange={() => setPlayMode("album")}
-                />
+                <input type="radio" name="playMode" checked={playMode === "album"} onChange={() => setPlayMode("album")} />
                 Album
               </label>
 
@@ -502,7 +445,6 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
             </div>
           </div>
 
-          {/* Card 3: mini nav */}
           <div style={card}>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <MiniTab label="My collection" active={miniTab === "my-collection"} onClick={() => setMiniTab("my-collection")} />
@@ -512,12 +454,9 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
             </div>
           </div>
 
-          {/* Card 4: tracks (song title click plays) */}
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 8 }}>Tracks</div>
-            <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 10 }}>
-              Click a song title to play.
-            </div>
+            <div style={{ opacity: 0.8, fontSize: 13, marginBottom: 10 }}>Click a song title to play.</div>
 
             <div style={{ display: "grid", gap: 8 }}>
               {tracks.map((t, i) => {
@@ -536,10 +475,7 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
                       onPickTrack?.({ tracks, index: i, mode: playMode });
                       setOpenMenuKey(null);
                     }}
-                    onAddToPlaylist={() => {
-                      // stub; keep
-                      setOpenMenuKey(null);
-                    }}
+                    onAddToPlaylist={() => setOpenMenuKey(null)}
                     onLyrics={() => {
                       setModal({ type: "lyrics", track: t });
                       setOpenMenuKey(null);
@@ -575,6 +511,72 @@ export default function MyAccount({ backendBase, shareId, onPickTrack }) {
       ) : null}
     </div>
   );
+}
+
+function mmss(seconds) {
+  const s = Math.max(0, Math.floor(Number(seconds || 0)));
+  const m = Math.floor(s / 60);
+  const r = String(s % 60).padStart(2, "0");
+  return `${m}:${r}`;
+}
+
+function Modal({ title, children, onClose }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        zIndex: 1000,
+      }}
+      onMouseDown={onClose}
+    >
+      <div
+        style={{
+          width: "min(760px, 100%)",
+          background: "rgba(24,24,24,0.98)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 16,
+          padding: 16,
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
+          <button
+            onClick={onClose}
+            style={{
+              border: "1px solid rgba(255,255,255,0.14)",
+              background: "rgba(255,255,255,0.06)",
+              color: "white",
+              borderRadius: 10,
+              padding: "6px 10px",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ marginTop: 12 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function useOutsideClose(ref, onClose) {
+  useEffect(() => {
+    function onDown(e) {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target)) onClose?.();
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [ref, onClose]);
 }
 
 function MiniTab({ label, active, onClick }) {
@@ -627,7 +629,6 @@ function TrackRow({
     >
       <div style={{ width: 26, opacity: 0.7, fontWeight: 900 }}>{track.slot}</div>
 
-      {/* TITLE CLICK PLAYS */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           onClick={onTitleClick}
@@ -644,7 +645,6 @@ function TrackRow({
         </div>
       </div>
 
-      {/* 3-dot menu */}
       <div style={{ position: "relative" }} ref={menuRef}>
         <button
           onClick={onOpenMenu}
