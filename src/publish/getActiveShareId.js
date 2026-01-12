@@ -1,24 +1,42 @@
 // src/publish/getActiveShareId.js
 const KEY = "blackout.activeShareId";
 
-export function getActiveShareId() {
-  const params = new URLSearchParams(window.location.search);
-  const fromQuery = params.get("shareId");
-  if (fromQuery && fromQuery.trim()) {
-    localStorage.setItem(KEY, fromQuery.trim());
-    return fromQuery.trim();
+function readFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    const v = url.searchParams.get("shareId");
+    return (v || "").trim();
+  } catch {
+    return "";
   }
+}
 
-  const fromStorage = localStorage.getItem(KEY);
-  if (fromStorage && fromStorage.trim()) return fromStorage.trim();
+function readFromStorage() {
+  try {
+    return (localStorage.getItem(KEY) || "").trim();
+  } catch {
+    return "";
+  }
+}
 
-  return null;
+function writeToStorage(v) {
+  try {
+    localStorage.setItem(KEY, v);
+  } catch {
+    // ignore
+  }
+}
+
+export function getActiveShareId() {
+  const fromUrl = readFromUrl();
+  if (fromUrl) {
+    writeToStorage(fromUrl);
+    return fromUrl;
+  }
+  return readFromStorage();
 }
 
 export function setActiveShareId(shareId) {
-  if (shareId && shareId.trim()) localStorage.setItem(KEY, shareId.trim());
-}
-
-export function clearActiveShareId() {
-  localStorage.removeItem(KEY);
+  const v = String(shareId || "").trim();
+  if (v) writeToStorage(v);
 }
