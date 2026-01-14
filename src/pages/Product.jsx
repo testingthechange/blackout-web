@@ -1,134 +1,87 @@
 // src/pages/Product.jsx
-import { useEffect, useMemo, useState } from "react";
-import { getActiveShareId } from "../publish/getActiveShareId";
+import React, { useEffect, useMemo, useState } from "react";
+import { loadAlbumBundleByShareId } from "../data/published/loadAlbumBundleByShareId.js";
+import { buildAlbumBundle } from "../selectors/buildAlbumBundle.jsx";
 
-export default function Product({ backendBase: backendBaseProp, shareId: shareIdProp }) {
-  const backendBase = backendBaseProp || import.meta.env.VITE_ALBUM_BACKEND_URL;
-  const shareId = useMemo(() => shareIdProp || getActiveShareId(), [shareIdProp]);
+function getShareIdFromQuery() {
+  const sp = new URLSearchParams(window.location.search);
+  return String(sp.get("shareId") || "").trim();
+}
 
-  const [status, setStatus] = useState("idle"); // idle | missing-env | missing-shareid | loading | ok | fail
-  const [manifest, setManifest] = useState(null);
-  const [err, setErr] = useState(null);
+export default function Product({ shareId: shareIdProp = "" }) {
+  const shareId = useMemo(() => {
+    return String(shareIdProp || getShareIdFromQuery()).trim();
+  }, [shareIdProp]);
+
+  const [album, setAlbum] = useState(null);
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!backendBase) {
-      setStatus("missing-env");
-      setManifest(null);
-      return;
-    }
+    let cancelled = false;
+
+    setErr("");
+    setAlbum(null);
+
     if (!shareId) {
-      setStatus("missing-shareid");
-      setManifest(null);
+      setErr("Missing shareId");
       return;
     }
 
-    setStatus("loading");
-    setErr(null);
+    setLoading(true);
 
-    fetch(`${backendBase}/api/publish/${encodeURIComponent(shareId)}/manifest`, { cache: "no-store" })
-      .then(async (r) => {
-        const j = await r.json().catch(() => null);
-        if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
-        return j;
-      })
-      .then((j) => {
-        if (!j?.ok) throw new Error("manifest not ok");
-        setManifest(j);
-        setStatus("ok");
-      })
-      .catch((e) => {
-        setManifest(null);
-        setErr(e);
-        setStatus("fail");
-      });
-  }, [backendBase, shareId]);
+    (async () => {
+      try {
+        const manifest = await loadAlbumBundleByShareId(shareId);
+        const bundle = buildAlbumBundle(manifest);
+        if (!cancelled) setAlbum(bundle);
+      } catch (e) {
+        if (!cancelled) setErr(e?.message || String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
 
-  if (status === "missing-env") {
+    return () => {
+      cancelled = true;
+    };
+  }, [shareId]);
+
+  if (loading) return <div style={{ padding: 24 }}>Loading album…</div>;
+
+  if (err) {
     return (
-      <div style={{ padding: 16 }}>
-        <div style={{ fontWeight: 900 }}>Product</div>
-        <div style={{ marginTop: 8, opacity: 0.85 }}>Missing backend env (VITE_ALBUM_BACKEND_URL).</div>
+      <div style={{ padding: 24, color: "#b91c1c", fontWeight: 900 }}>
+        {err}
       </div>
     );
   }
 
-  if (status === "missing-shareid") {
-    return (
-      <div style={{ padding: 16 }}>
-        <div style={{ fontWeight: 900 }}>Product</div>
-        <div style={{ marginTop: 8, opacity: 0.85 }}>
-          Missing shareId. Add <code>?shareId=...</code>.
-        </div>
-      </div>
-    );
-  }
-
-  if (status === "fail") {
-    return (
-      <div style={{ padding: 16 }}>
-        <div style={{ fontWeight: 900 }}>Product</div>
-        <div style={{ marginTop: 10, padding: 12, border: "1px solid rgba(255,0,0,0.45)", borderRadius: 12 }}>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>Failed to load product</div>
-          <div style={{ opacity: 0.9, whiteSpace: "pre-wrap" }}>{String(err?.message || err)}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!manifest) return <div style={{ padding: 16 }}>Loading…</div>;
-
-  const albumName = String(manifest?.albumName || "Album");
-  const performers = String(manifest?.performers || "");
-  const description = String(manifest?.productDescription || "Digital album access tied to published snapshot.");
-  const priceText = String(manifest?.priceText || "$9.99");
+  if (!album) return <div style={{ padding: 24 }}>No album</div>;
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 6 }}>Product</div>
-      <div style={{ opacity: 0.85, marginBottom: 14 }}>
-        {albumName}{performers ? ` — ${performers}` : ""}
+    <div style={{ padding: 24 }}>
+      <div style={{ fontSize: 12, opacity: 0.7 }}>
+        ShareId: <b>{album.shareId}</b>
       </div>
 
-      <div
-        style={{
-          border: "1px solid rgba(255,255,255,0.10)",
-          borderRadius: 16,
-          padding: 14,
-          background: "rgba(255,255,255,0.03)",
-          maxWidth: 760,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-          <div style={{ fontWeight: 900 }}>{albumName}</div>
-          <div style={{ fontWeight: 900 }}>{priceText}</div>
-        </div>
+      <h1 style={{ marginTop: 12 }}>{album.meta.title || "Album"}</h1>
 
-        <div style={{ marginTop: 10, opacity: 0.85, lineHeight: 1.35 }}>{description}</div>
+      {album.cover.url ? (
+        <img
+          src={album.cover.url}
+          alt="cover"
+          style={{ maxWidth: 320, borderRadius: 12 }}
+        />
+      ) : null}
 
-        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a href={`/shop?shareId=${encodeURIComponent(shareId)}`} style={btn}>
-            Back to shop
-          </a>
-          <a href={`/account?shareId=${encodeURIComponent(shareId)}`} style={btn}>
-            View account
-          </a>
-        </div>
-
-        <div style={{ marginTop: 12, opacity: 0.75, fontSize: 12 }}>
-          Snapshot source: <code>/api/publish/{shareId}/manifest</code>
-        </div>
+      <div style={{ marginTop: 20 }}>
+        {album.tracks.map((t) => (
+          <div key={t.slot} style={{ marginBottom: 8 }}>
+            {t.slot}. {t.title}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
-
-const btn = {
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "white",
-  borderRadius: 12,
-  padding: "10px 12px",
-  fontWeight: 900,
-  cursor: "pointer",
-  textDecoration: "none",
-};

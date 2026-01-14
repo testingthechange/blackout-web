@@ -1,20 +1,23 @@
-// src/data/published/loadAlbumBundleByShareId.jsx
-// shareId -> AlbumBundle (published artifact only)
+// src/data/published/loadAlbumBundleByShareId.js
 
-function invariant(cond, msg) {
-  if (!cond) throw new Error(msg);
-}
+export async function loadAlbumBundleByShareId(shareId) {
+  if (!shareId) {
+    throw new Error("loadAlbumBundleByShareId: missing shareId");
+  }
 
-export async function loadAlbumBundleByShareId({ shareId, fetchJson }) {
-  invariant(shareId, "loadAlbumBundleByShareId: shareId required");
-  invariant(typeof fetchJson === "function", "loadAlbumBundleByShareId: fetchJson required");
+  const manifestUrl = `https://block-7306-player.s3.us-west-1.amazonaws.com/public/players/${encodeURIComponent(
+    shareId
+  )}/manifest.json`;
 
-  const path = `/storage/published/${shareId}/album.bundle.json`;
-  const bundle = await fetchJson(path);
+  const res = await fetch(manifestUrl, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Manifest fetch failed (${res.status})`);
+  }
 
-  invariant(bundle, "Published bundle not found");
-  invariant(bundle?.schemaVersion === 1, "Unsupported bundle schemaVersion");
-  invariant(bundle?.album?.tracks?.length > 0, "Bundle has no tracks");
+  const manifest = await res.json();
+  if (!manifest || manifest.shareId !== shareId) {
+    throw new Error("Invalid or mismatched manifest");
+  }
 
-  return bundle;
+  return manifest;
 }

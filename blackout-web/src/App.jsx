@@ -1,35 +1,311 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+// FILE: blackout-web/src/App.jsx
+// Supports BOTH:
+//   /shop/product/:shareId
+//   /product?shareId=...
+// Keeps BottomPlayer visible on /product and /shop/product.
 
-function App() {
-  const [count, setCount] = useState(0)
+import { Routes, Route, Link, useLocation, useNavigate, useSearchParams, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+import Home from "./pages/Home.jsx";
+import Shop from "./pages/Shop.jsx";
+import Product from "./pages/Product.jsx";
+import MyAccount from "./pages/MyAccount.jsx";
+import Sold from "./pages/Sold.jsx";
+import Login from "./pages/Login.jsx";
+
+import BottomPlayer from "./components/BottomPlayer.jsx";
+
+const BACKEND_BASE = (import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
+
+async function fetchJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(j?.error || `HTTP ${r.status} ${url}`);
+  return j;
 }
 
-export default App
+// Wrap Product for /shop/product/:shareId so Product ALWAYS receives shareId prop
+function ShopProductRoute({ backendBase, onPickTrack }) {
+  const { shareId } = useParams();
+  const sid = String(shareId || "").trim();
+  return <Product backendBase={backendBase} shareId={sid} onPickTrack={onPickTrack} />;
+}
+
+export default function App() {
+  const loc = useLocation();
+  const nav = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // shareId from querystring (?shareId=...)
+  const queryShareId = String(searchParams.get("shareId") || "").trim();
+  const qParam = String(searchParams.get("q") || "").trim();
+
+  // shareId from route (/shop/product/:shareId)
+  const routeShareId = useMemo(() => {
+    const m = loc.pathname.match(/^\/shop\/product\/([^/]+)/);
+    return m?.[1] ? decodeURIComponent(m[1]) : "";
+  }, [loc.pathname]);
+
+  // Prefer route param when present
+  const activeShareId = routeShareId || queryShareId;
+
+  // ---------- BACKEND STATUS ----------
+  const [backendStatus, setBackendStatus] = useState("checking");
+  useEffect(() => {
+    if (!BACKEND_BASE) {
+      setBackendStatus("missing");
+      return;
+    }
+    fetch(`${BACKEND_BASE}/api/health`, { cache: "no-store" })
+      .then((r) => setBackendStatus(r.ok ? "ok" : "fail"))
+      .catch(() => setBackendStatus("fail"));
+  }, []);
+
+  // ---------- GLOBAL SEARCH ----------
+  const [searchDraft, setSearchDraft] = useState(qParam);
+  useEffect(() => setSearchDraft(qParam), [qParam]);
+
+  function updateQueryParam(nextQ) {
+    const next = new URLSearchParams(searchParams);
+    if (nextQ) next.set("q", nextQ);
+    else next.delete("q");
+    setSearchParams(next, { replace: true });
+  }
+
+  // ---------- PLAYER STATE ----------
+  const [queue, setQueue] = useState([]); // each track: { title, s3Key, url? }
+  const [idx, setIdx] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // "album" | "smartBridge"
+  const [playerMode, setPlayerMode] = useState("album");
+
+  const activeTrack = queue[idx] || null;
+
+  // show player on Product + Account
+  const onProductPage = loc.pathname.startsWith("/shop/product") || loc.pathname.startsWith("/product");
+  const onAccountPage = loc.pathname.startsWith("/account");
+  const playerVisible = onProductPage || onAccountPage;
+
+  // Cache signed urls briefly per s3Key
+  const signedCache = useMemo(() => new Map(), []);
+
+  async function signTrackIfNeeded(track) {
+    if (!track) return null;
+    const s3Key = String(track.s3Key || "").trim();
+    if (!s3Key) return track;
+
+    if (track.url) return track;
+    if (!BACKEND_BASE) throw new Error("Missing backend env");
+
+    if (signedCache.has(s3Key)) {
+      return { ...track, url: signedCache.get(s3Key) };
+    }
+
+    const j = await fetchJson(`${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`);
+    if (!j?.ok || !j.url) throw new Error("Failed to sign playback url");
+
+    signedCache.set(s3Key, j.url);
+    return { ...track, url: j.url };
+  }
+
+  // Called by pages when user clicks a track title
+  async function setPlayContext({ tracks, index, mode }) {
+    if (!Array.isArray(tracks) || !tracks.length) return;
+
+    const i = Math.max(0, Math.min(Number(index || 0), tracks.length - 1));
+    const t = await signTrackIfNeeded(tracks[i]);
+
+    const nextQueue = tracks.map((x, k) => (k === i ? t : x));
+    setQueue(nextQueue);
+    setIdx(i);
+    setIsPlaying(true);
+
+    if (mode === "album" || mode === "smartBridge") setPlayerMode(mode);
+  }
+
+  async function goPrev() {
+    if (!queue.length) return;
+    const nextI = idx > 0 ? idx - 1 : queue.length - 1;
+    const t = await signTrackIfNeeded(queue[nextI]);
+    const nextQueue = queue.map((x, k) => (k === nextI ? t : x));
+    setQueue(nextQueue);
+    setIdx(nextI);
+    setIsPlaying(true);
+  }
+
+  async function goNext() {
+    if (!queue.length) return;
+    const nextI = (idx + 1) % queue.length;
+    const t = await signTrackIfNeeded(queue[nextI]);
+    const nextQueue = queue.map((x, k) => (k === nextI ? t : x));
+    setQueue(nextQueue);
+    setIdx(nextI);
+    setIsPlaying(true);
+  }
+
+  // Use ACTIVE shareId for nav links (works whether you came from /shop/product/:shareId or ?shareId=)
+  const shopHref = `/shop${activeShareId ? `?shareId=${encodeURIComponent(activeShareId)}` : ""}${
+    qParam ? `${activeShareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
+  }`;
+  const accountHref = `/account${activeShareId ? `?shareId=${encodeURIComponent(activeShareId)}` : ""}${
+    qParam ? `${activeShareId ? "&" : "?"}q=${encodeURIComponent(qParam)}` : ""
+  }`;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 120px" }}>
+        {/* HEADER */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "start", gap: 12 }}>
+          <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Block Radius</div>
+
+          <div style={{ display: "flex", justifyContent: "center", gap: 18, paddingTop: 2 }}>
+            <Link to="/" style={navLink}>
+              Home
+            </Link>
+            <Link to={shopHref} style={navLink}>
+              Shop
+            </Link>
+            <Link to={accountHref} style={navLink}>
+              Account
+            </Link>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ width: 320 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Link to="/login" style={loginLink}>
+                  Login
+                </Link>
+              </div>
+
+              {/* GLOBAL SEARCH */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  updateQueryParam(String(searchDraft || "").trim());
+                  if (!loc.pathname.startsWith("/shop")) nav("/shop" + window.location.search);
+                }}
+                style={{ marginTop: 10, display: "flex", gap: 8, justifyContent: "flex-end" }}
+              >
+                <input value={searchDraft} onChange={(e) => setSearchDraft(e.target.value)} placeholder="Search" style={searchInput} />
+                <button type="submit" style={searchBtn}>
+                  Search
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        {/* STATUS ROW */}
+        <div style={statusRow}>
+          <div>
+            Backend:{" "}
+            {backendStatus === "ok" && "OK"}
+            {backendStatus === "fail" && "FAIL"}
+            {backendStatus === "missing" && "MISSING ENV"}
+            {backendStatus === "checking" && "…"}
+          </div>
+          <div>ShareId: {activeShareId || "—"}</div>
+        </div>
+
+        {/* ROUTES */}
+        <Routes>
+          <Route path="/" element={<Home />} />
+
+          <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={activeShareId} onPickTrack={setPlayContext} />} />
+
+          {/* Support /product?shareId=... */}
+          <Route path="/product" element={<Product backendBase={BACKEND_BASE} shareId={activeShareId} onPickTrack={setPlayContext} />} />
+
+          {/* Support /shop/product/:shareId */}
+          <Route path="/shop/product/:shareId" element={<ShopProductRoute backendBase={BACKEND_BASE} onPickTrack={setPlayContext} />} />
+
+          <Route path="/account" element={<MyAccount backendBase={BACKEND_BASE} shareId={activeShareId} onPickTrack={setPlayContext} />} />
+
+          <Route path="/sold" element={<Sold />} />
+          <Route path="/login" element={<Login />} />
+        </Routes>
+      </div>
+
+      {/* PLAYER */}
+      {playerVisible ? (
+        activeTrack?.url ? (
+          <BottomPlayer
+            mode={playerMode}
+            track={activeTrack}
+            queue={queue}
+            index={idx}
+            isPlaying={isPlaying}
+            onPlayPause={setIsPlaying}
+            onPrev={goPrev}
+            onNext={goNext}
+            {...(onProductPage ? { previewSeconds: 30 } : {})}
+          />
+        ) : (
+          <div
+            style={{
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 86,
+              background: "rgba(0,0,0,0.35)",
+              borderTop: "1px solid rgba(255,255,255,0.10)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "rgba(255,255,255,0.75)",
+              fontWeight: 900,
+            }}
+          >
+            Select a track to play
+          </div>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+const navLink = { color: "white", textDecoration: "none", fontWeight: 900, opacity: 0.9 };
+
+const loginLink = {
+  color: "white",
+  textDecoration: "none",
+  fontWeight: 900,
+  padding: "6px 10px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.06)",
+};
+
+const statusRow = {
+  marginTop: 10,
+  display: "flex",
+  justifyContent: "center",
+  gap: 16,
+  fontSize: 12,
+  opacity: 0.8,
+};
+
+const searchInput = {
+  width: 220,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.18)",
+  outline: "none",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  fontWeight: 800,
+};
+
+const searchBtn = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(34,197,94,0.55)",
+  background: "rgba(34,197,94,0.20)",
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
+};

@@ -1,5 +1,14 @@
-// src/App.jsx
-import { Routes, Route, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+// FILE: src/App.jsx
+import {
+  Routes,
+  Route,
+  Link,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+  useParams,
+  Navigate,
+} from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 
 import Home from "./pages/Home.jsx";
@@ -20,6 +29,19 @@ async function fetchJson(url) {
   return j;
 }
 
+// Reads :shareId from /product/:shareId (or /shop/product/:shareId legacy) and forwards to Product
+function ProductWithRouteParam({ backendBase, onPickTrack, onBuy }) {
+  const { shareId } = useParams();
+  return <Product backendBase={backendBase} shareId={shareId} onPickTrack={onPickTrack} onBuy={onBuy} />;
+}
+
+// Redirects legacy /shop/product/:shareId -> /product?shareId=...
+function LegacyProductRedirect() {
+  const { shareId } = useParams();
+  const sid = String(shareId || "").trim();
+  return <Navigate to={sid ? `/product?shareId=${encodeURIComponent(sid)}` : "/product"} replace />;
+}
+
 export default function App() {
   const loc = useLocation();
   const nav = useNavigate();
@@ -29,7 +51,7 @@ export default function App() {
   const shareId = String(searchParams.get("shareId") || "").trim();
   const qParam = String(searchParams.get("q") || "").trim();
 
-  // shareId from route (/shop/product/:shareId)
+  // shareId from legacy route (/shop/product/:shareId) for display only
   const routeShareId = useMemo(() => {
     const m = loc.pathname.match(/^\/shop\/product\/([^/]+)/);
     return m?.[1] ? decodeURIComponent(m[1]) : "";
@@ -71,7 +93,9 @@ export default function App() {
   const activeTrack = queue[idx] || null;
 
   // show player on Product + Account
-  const onProductPage = loc.pathname.startsWith("/shop/product");
+  const onProductPage =
+    loc.pathname.startsWith("/shop/product") ||
+    loc.pathname.startsWith("/product");
   const onAccountPage = loc.pathname.startsWith("/account");
   const playerVisible = onProductPage || onAccountPage;
 
@@ -210,16 +234,33 @@ export default function App() {
             element={<Shop backendBase={BACKEND_BASE} shareId={shareId} onPickTrack={setPlayContext} />}
           />
 
+          {/* NEW: /product?shareId=... */}
           <Route
-            path="/shop/product/:shareId"
+            path="/product"
             element={
               <Product
+                backendBase={BACKEND_BASE}
+                shareId={shareId}
+                onPickTrack={setPlayContext}
+                onBuy={(id) => nav(`/sold?productId=${encodeURIComponent(id)}`)}
+              />
+            }
+          />
+
+          {/* Optional: /product/:shareId */}
+          <Route
+            path="/product/:shareId"
+            element={
+              <ProductWithRouteParam
                 backendBase={BACKEND_BASE}
                 onPickTrack={setPlayContext}
                 onBuy={(id) => nav(`/sold?productId=${encodeURIComponent(id)}`)}
               />
             }
           />
+
+          {/* Legacy: /shop/product/:shareId -> redirect */}
+          <Route path="/shop/product/:shareId" element={<LegacyProductRedirect />} />
 
           <Route
             path="/account"
@@ -228,6 +269,8 @@ export default function App() {
 
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
+
+          <Route path="*" element={<div style={{ padding: 16, fontWeight: 900 }}>404</div>} />
         </Routes>
       </div>
 
