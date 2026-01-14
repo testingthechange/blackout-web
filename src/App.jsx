@@ -122,7 +122,8 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 120px" }}>
         {/* HEADER */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, maxWidth: 1100 }}>
+
           <div style={{ fontWeight: 900 }}>Block Radius</div>
 
           <div style={{ display: "flex", gap: 18, justifyContent: "center" }}>
