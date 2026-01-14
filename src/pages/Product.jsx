@@ -1,3 +1,4 @@
+// src/pages/Product.jsx
 import React, { useEffect, useMemo, useState } from "react";
 
 function getShareIdFromQuery() {
@@ -19,29 +20,23 @@ export default function Product() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setManifest(null);
-    setErr("");
+    console.log("[PRODUCT] mount", { shareId, manifestUrl });
 
     if (!shareId) {
-      setErr("Missing shareId. Use /product?shareId=YOUR_ID");
-      return;
-    }
-    if (!manifestUrl) {
-      setErr("Missing manifest URL");
+      setErr("Missing shareId (add ?shareId=...)");
       return;
     }
 
     let cancelled = false;
     setLoading(true);
+    setErr("");
+    setManifest(null);
 
     (async () => {
       try {
         const r = await fetch(manifestUrl, { cache: "no-store" });
         if (!r.ok) throw new Error(`Manifest HTTP ${r.status}`);
-        const j = await r.json().catch(() => null);
-        if (!j) throw new Error("Manifest JSON parse failed");
-        if (String(j.shareId || "") !== String(shareId)) throw new Error("Manifest shareId mismatch");
-
+        const j = await r.json();
         if (!cancelled) setManifest(j);
       } catch (e) {
         if (!cancelled) setErr(e?.message || String(e));
@@ -56,17 +51,15 @@ export default function Product() {
   }, [shareId, manifestUrl]);
 
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ fontSize: 12, opacity: 0.75 }}>
-        Route: <b>{window.location.pathname}</b>
-      </div>
+    <div style={{ padding: 16, border: "2px solid #111", borderRadius: 12 }}>
+      <h1 style={{ margin: 0, marginBottom: 10 }}>Product</h1>
 
-      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+      <div style={{ fontSize: 14, marginBottom: 6 }}>
         ShareId: <b>{shareId || "—"}</b>
       </div>
 
-      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
-        Manifest URL:{" "}
+      <div style={{ fontSize: 14, marginBottom: 12 }}>
+        Manifest:{" "}
         {manifestUrl ? (
           <a href={manifestUrl} target="_blank" rel="noreferrer">
             {manifestUrl}
@@ -76,34 +69,13 @@ export default function Product() {
         )}
       </div>
 
-      {loading ? <div style={{ marginTop: 14 }}>Loading manifest…</div> : null}
-      {err ? <div style={{ marginTop: 14, color: "#b91c1c", fontWeight: 800 }}>{err}</div> : null}
+      {loading ? <div style={{ fontWeight: 900 }}>Loading manifest…</div> : null}
+      {err ? <div style={{ color: "#b91c1c", fontWeight: 900 }}>{err}</div> : null}
 
       {manifest ? (
-        <div style={{ marginTop: 18 }}>
-          <h1 style={{ margin: 0 }}>{manifest?.album?.title || "Album"}</h1>
-
-          {manifest?.album?.coverUrl ? (
-            <img
-              src={manifest.album.coverUrl}
-              alt="cover"
-              style={{ marginTop: 12, maxWidth: 320, width: "100%", borderRadius: 12 }}
-            />
-          ) : null}
-
-          <div style={{ marginTop: 16, fontWeight: 800 }}>Tracks</div>
-          <div style={{ marginTop: 8 }}>
-            {(Array.isArray(manifest.tracks) ? manifest.tracks : []).map((t) => (
-              <div key={t.slot} style={{ marginBottom: 6 }}>
-                {t.slot}. {t.title}
-              </div>
-            ))}
-          </div>
-
-          <pre style={{ marginTop: 18, fontSize: 12, opacity: 0.85, whiteSpace: "pre-wrap" }}>
-            {JSON.stringify(manifest, null, 2)}
-          </pre>
-        </div>
+        <pre style={{ marginTop: 12, padding: 12, background: "#f6f6f6", borderRadius: 10 }}>
+          {JSON.stringify(manifest, null, 2)}
+        </pre>
       ) : null}
     </div>
   );
