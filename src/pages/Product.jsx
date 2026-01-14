@@ -1,7 +1,7 @@
 // src/pages/Product.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { loadAlbumBundleByShareId } from "../data/published/loadAlbumBundleByShareId.js";
-import { buildAlbumBundle } from "../selectors/buildAlbumBundle.jsx";
+import { buildAlbumBundle } from "../selectors/buildAlbumBundle.js";
 
 function getShareIdFromQuery() {
   const sp = new URLSearchParams(window.location.search);
@@ -9,26 +9,22 @@ function getShareIdFromQuery() {
 }
 
 export default function Product({ shareId: shareIdProp = "" }) {
-  const shareId = useMemo(() => {
-    return String(shareIdProp || getShareIdFromQuery()).trim();
-  }, [shareIdProp]);
+  const shareId = useMemo(() => String(shareIdProp || getShareIdFromQuery()).trim(), [shareIdProp]);
 
   const [album, setAlbum] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-
-    setErr("");
-    setAlbum(null);
-
     if (!shareId) {
       setErr("Missing shareId");
       return;
     }
 
+    let cancelled = false;
     setLoading(true);
+    setErr("");
+    setAlbum(null);
 
     (async () => {
       try {
@@ -48,15 +44,7 @@ export default function Product({ shareId: shareIdProp = "" }) {
   }, [shareId]);
 
   if (loading) return <div style={{ padding: 24 }}>Loading album…</div>;
-
-  if (err) {
-    return (
-      <div style={{ padding: 24, color: "#b91c1c", fontWeight: 900 }}>
-        {err}
-      </div>
-    );
-  }
-
+  if (err) return <div style={{ padding: 24, color: "#b91c1c", fontWeight: 900 }}>{err}</div>;
   if (!album) return <div style={{ padding: 24 }}>No album</div>;
 
   return (
@@ -68,11 +56,7 @@ export default function Product({ shareId: shareIdProp = "" }) {
       <h1 style={{ marginTop: 12 }}>{album.meta.title || "Album"}</h1>
 
       {album.cover.url ? (
-        <img
-          src={album.cover.url}
-          alt="cover"
-          style={{ maxWidth: 320, borderRadius: 12 }}
-        />
+        <img src={album.cover.url} alt="cover" style={{ maxWidth: 320, borderRadius: 12 }} />
       ) : null}
 
       <div style={{ marginTop: 20 }}>
