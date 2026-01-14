@@ -1,5 +1,5 @@
 // src/App.jsx
-import { Routes, Route, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Routes, Route, Link, useLocation, useNavigate, useSearchParams, Navigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 
 import Home from "./pages/Home.jsx";
@@ -17,6 +17,13 @@ async function fetchJson(url) {
   const j = await r.json().catch(() => null);
   if (!r.ok) throw new Error(j?.error || `HTTP ${r.status} ${url}`);
   return j;
+}
+
+// Redirect legacy /shop/product/:shareId -> /product?shareId=...
+function LegacyProductRedirect() {
+  const { shareId } = useParams();
+  const sid = String(shareId || "").trim();
+  return <Navigate to={sid ? `/product?shareId=${encodeURIComponent(sid)}` : "/product"} replace />;
 }
 
 export default function App() {
@@ -54,10 +61,7 @@ export default function App() {
 
   const activeTrack = queue[idx] || null;
 
-  const onProductPage =
-    loc.pathname.startsWith("/product") ||
-    loc.pathname.startsWith("/shop/product");
-
+  const onProductPage = loc.pathname.startsWith("/product") || loc.pathname.startsWith("/shop/product");
   const playerVisible = onProductPage;
 
   const signedCache = useMemo(() => new Map(), []);
@@ -69,25 +73,30 @@ export default function App() {
     const s3Key = String(track.s3Key || "").trim();
     if (!s3Key) return track;
 
+    if (!BACKEND_BASE) throw new Error("Missing backend env (VITE_ALBUM_BACKEND_URL)");
+
     if (signedCache.has(s3Key)) {
       return { ...track, url: signedCache.get(s3Key) };
     }
 
-    const j = await fetchJson(
-      `${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`
-    );
+    const j = await fetchJson(`${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`);
+    if (!j?.url) throw new Error("Signer did not return url");
+
     signedCache.set(s3Key, j.url);
     return { ...track, url: j.url };
   }
 
   async function setPlayContext({ tracks, index = 0, mode = "album" }) {
     if (!tracks?.length) return;
-    const i = Math.max(0, Math.min(index, tracks.length - 1));
+
+    const i = Math.max(0, Math.min(Number(index || 0), tracks.length - 1));
     const t = await signTrackIfNeeded(tracks[i]);
+
     setQueue(tracks.map((x, k) => (k === i ? t : x)));
     setIdx(i);
     setIsPlaying(true);
-    setPlayerMode(mode);
+
+    if (mode === "album" || mode === "smartBridge") setPlayerMode(mode);
   }
 
   async function goPrev() {
@@ -118,71 +127,83 @@ export default function App() {
           <div style={{ fontWeight: 900 }}>Block Radius</div>
 
           <div style={{ display: "flex", gap: 18 }}>
-            <Link to="/" style={navLink}>Home</Link>
-            <Link to={shopHref} style={navLink}>Shop</Link>
+            <Link to="/" style={navLink}>
+              Home
+            </Link>
+            <Link to={shopHref} style={navLink}>
+              Shop
+            </Link>
           </div>
 
           <div style={{ textAlign: "right" }}>
-            <Link to="/login" style={loginLink}>Login</Link>
+            <Link to="/login" style={loginLink}>
+              Login
+            </Link>
           </div>
         </div>
 
         {/* STATUS */}
         <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
-          Backend: {backendStatus.toUpperCase()} · ShareId: {activeShareId || "—"}
+          Backend: {String(backendStatus || "").toUpperCase()} · ShareId: {activeShareId || "—"}
         </div>
 
         {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
 
-          <Route
-            path="/shop"
-            element={<Shop backendBase={BACKEND_BASE} shareId={activeShareId} />}
-          />
+          <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={activeShareId} />} />
 
-          {/* ✅ THIS IS THE CRITICAL ROUTE */}
+          {/* ✅ /product?shareId=... */}
           <Route
             path="/product"
-            element={
-              <Product
-                backendBase={BACKEND_BASE}
-                shareId={activeShareId}
-                onPickTrack={setPlayContext}
-              />
-            }
+            element={<Product backendBase={BACKEND_BASE} shareId={activeShareId} onPickTrack={setPlayContext} />}
           />
 
-          {/* legacy support */}
-          <Route
-            path="/shop/product/:shareId"
-            element={
-              <Product
-                backendBase={BACKEND_BASE}
-                shareId={activeShareId}
-                onPickTrack={setPlayContext}
-              />
-            }
-          />
+          {/* Legacy: /shop/product/:shareId -> redirect */}
+          <Route path="/shop/product/:shareId" element={<LegacyProductRedirect />} />
 
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
+
+          {/* Safety fallback */}
+          <Route path="*" element={<Navigate to={activeShareId ? `/product?shareId=${encodeURIComponent(activeShareId)}` : "/product"} replace />} />
         </Routes>
       </div>
 
       {/* PLAYER */}
-      {playerVisible && activeTrack?.url ? (
-        <BottomPlayer
-          mode={playerMode}
-          track={activeTrack}
-          queue={queue}
-          index={idx}
-          isPlaying={isPlaying}
-          onPlayPause={setIsPlaying}
-          onPrev={goPrev}
-          onNext={goNext}
-          previewSeconds={30}
-        />
+      {playerVisible ? (
+        activeTrack?.url ? (
+          <BottomPlayer
+            mode={playerMode}
+            track={activeTrack}
+            queue={queue}
+            index={idx}
+            isPlaying={isPlaying}
+            onPlayPause={setIsPlaying}
+            onPrev={goPrev}
+            onNext={goNext}
+            previewSeconds={30}
+          />
+        ) : (
+          <div
+            style={{
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 86,
+              background: "rgba(0,0,0,0.35)",
+              borderTop: "1px solid rgba(255,255,255,0.10)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "rgba(255,255,255,0.75)",
+              fontWeight: 900,
+            }}
+          >
+            Select a track to play
+          </div>
+        )
       ) : null}
     </div>
   );
