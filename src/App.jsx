@@ -22,7 +22,7 @@ async function fetchJson(url) {
 export default function App() {
   const loc = useLocation();
   const nav = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // ---- SHARE ID (querystring-first, canonical) ----
   const queryShareId = String(searchParams.get("shareId") || "").trim();
@@ -46,53 +46,54 @@ export default function App() {
       .catch(() => setBackendStatus("fail"));
   }, []);
 
-  // ---- PLAYER STATE ----
+  // ---- GLOBAL SEARCH ----
+  const qParam = String(searchParams.get("q") || "").trim();
+  const [searchDraft, setSearchDraft] = useState(qParam);
+  useEffect(() => setSearchDraft(qParam), [qParam]);
+
+  function updateQueryParam(nextQ) {
+    const next = new URLSearchParams(searchParams);
+    const v = String(nextQ || "").trim();
+    if (v) next.set("q", v);
+    else next.delete("q");
+    setSearchParams(next, { replace: true });
+  }
+
+  // ---- PLAYER STATE (kept, but optional) ----
   const [queue, setQueue] = useState([]);
   const [idx, setIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playerMode, setPlayerMode] = useState("album");
-
   const activeTrack = queue[idx] || null;
 
   const onProductPage =
     loc.pathname.startsWith("/product") || loc.pathname.startsWith("/shop/product");
-
   const playerVisible = onProductPage;
 
   const signedCache = useMemo(() => new Map(), []);
 
   async function signTrackIfNeeded(track) {
     if (!track) return null;
+    if (track.url) return track;
 
-    // ✅ direct public audioUrl works (published manifest)
-    const directUrl = String(track.url || track.audioUrl || "").trim();
-    if (directUrl) return { ...track, url: directUrl };
-
-    // ✅ fallback to signing (if you ever feed s3Key/audioKey)
-    const s3Key = String(track.s3Key || track.audioKey || "").trim();
+    const s3Key = String(track.s3Key || "").trim();
     if (!s3Key) return track;
 
-    if (signedCache.has(s3Key)) {
-      return { ...track, url: signedCache.get(s3Key) };
-    }
+    if (signedCache.has(s3Key)) return { ...track, url: signedCache.get(s3Key) };
 
     const j = await fetchJson(`${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`);
     if (!j?.url) throw new Error("Failed to sign playback url");
-
     signedCache.set(s3Key, j.url);
     return { ...track, url: j.url };
   }
 
   async function setPlayContext({ tracks, index = 0, mode = "album" }) {
     if (!Array.isArray(tracks) || !tracks.length) return;
-
     const i = Math.max(0, Math.min(Number(index || 0), tracks.length - 1));
     const t = await signTrackIfNeeded(tracks[i]);
-
     setQueue(tracks.map((x, k) => (k === i ? t : x)));
     setIdx(i);
     setIsPlaying(true);
-
     if (mode === "album" || mode === "smartBridge") setPlayerMode(mode);
   }
 
@@ -115,6 +116,7 @@ export default function App() {
   }
 
   const shopHref = `/shop${activeShareId ? `?shareId=${encodeURIComponent(activeShareId)}` : ""}`;
+  const productHref = `/product${activeShareId ? `?shareId=${encodeURIComponent(activeShareId)}` : ""}`;
 
   return (
     <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
@@ -124,18 +126,35 @@ export default function App() {
           <div style={{ fontWeight: 900 }}>Block Radius</div>
 
           <div style={{ display: "flex", gap: 18, justifyContent: "center" }}>
-            <Link to="/" style={navLink}>
-              Home
-            </Link>
-            <Link to={shopHref} style={navLink}>
-              Shop
-            </Link>
+            <Link to="/" style={navLink}>Home</Link>
+            <Link to={shopHref} style={navLink}>Shop</Link>
+            <Link to={productHref} style={navLink}>Product</Link>
           </div>
 
+          {/* Right: login + global search under it */}
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Link to="/login" style={loginLink}>
-              Login
-            </Link>
+            <div style={{ width: 360 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Link to="/login" style={loginLink}>Login</Link>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  updateQueryParam(searchDraft);
+                  if (!loc.pathname.startsWith("/shop")) nav("/shop" + window.location.search);
+                }}
+                style={{ marginTop: 10, display: "flex", gap: 10, justifyContent: "flex-end" }}
+              >
+                <input
+                  value={searchDraft}
+                  onChange={(e) => setSearchDraft(e.target.value)}
+                  placeholder="Search albums"
+                  style={searchInput}
+                />
+                <button type="submit" style={searchBtn}>Search</button>
+              </form>
+            </div>
           </div>
         </div>
 
@@ -167,9 +186,9 @@ export default function App() {
         </Routes>
       </div>
 
-      {/* PLAYER (✅ show even if only audioUrl exists; also show bar when no track) */}
+      {/* PLAYER (kept) */}
       {playerVisible ? (
-        activeTrack?.url || activeTrack?.audioUrl ? (
+        activeTrack?.url ? (
           <BottomPlayer
             mode={playerMode}
             track={activeTrack}
@@ -206,11 +225,7 @@ export default function App() {
   );
 }
 
-const navLink = {
-  color: "white",
-  textDecoration: "none",
-  fontWeight: 900,
-};
+const navLink = { color: "white", textDecoration: "none", fontWeight: 900 };
 
 const loginLink = {
   color: "white",
@@ -219,4 +234,26 @@ const loginLink = {
   padding: "6px 10px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.06)",
+};
+
+const searchInput = {
+  width: 240,
+  padding: "12px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.18)",
+  outline: "none",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  fontWeight: 800,
+};
+
+const searchBtn = {
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.18)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  fontWeight: 900,
+  cursor: "pointer",
 };
