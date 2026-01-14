@@ -1,35 +1,23 @@
-      {/* PLAYER */}
-      {playerVisible ? (
-        activeTrack?.url ? (
-          <BottomPlayer
-            mode={playerMode}
-            track={activeTrack}
-            queue={queue}
-            index={idx}
-            isPlaying={isPlaying}
-            onPlayPause={setIsPlaying}
-            onPrev={goPrev}
-            onNext={goNext}
-            previewSeconds={30}
-          />
-        ) : (
-          <div
-            style={{
-              position: "fixed",
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: 86,
-              background: "rgba(0,0,0,0.35)",
-              borderTop: "1px solid rgba(255,255,255,0.10)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "rgba(255,255,255,0.75)",
-              fontWeight: 900,
-            }}
-          >
-            Select a track to play
-          </div>
-        )
-      ) : null}
+// src/App.jsx
+import { Routes, Route, Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+
+import Home from "./pages/Home.jsx";
+import Shop from "./pages/Shop.jsx";
+import Product from "./pages/Product.jsx";
+import Sold from "./pages/Sold.jsx";
+import Login from "./pages/Login.jsx";
+import BottomPlayer from "./components/BottomPlayer.jsx";
+
+const BACKEND_BASE = (import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
+
+async function fetchJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(j?.error || `HTTP ${r.status} ${url}`);
+  return j;
+}
+
+export default function App() {
+  // ... keep the rest of your App exactly the same ...
+}
