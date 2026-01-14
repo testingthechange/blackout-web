@@ -1,8 +1,14 @@
 // src/pages/Product.jsx
 import { useEffect, useMemo, useState } from "react";
 
-export default function Product({ backendBase: backendBaseProp, shareId: shareIdProp, onPickTrack }) {
-  const backendBase = (backendBaseProp || import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
+export default function Product({
+  backendBase: backendBaseProp,
+  shareId: shareIdProp,
+  onPickTrack,
+}) {
+  const backendBase = (backendBaseProp || import.meta.env.VITE_ALBUM_BACKEND_URL || "")
+    .trim()
+    .replace(/\/+$/, "");
   const shareId = useMemo(() => String(shareIdProp || "").trim(), [shareIdProp]);
 
   const [status, setStatus] = useState("idle"); // idle | missing-env | missing-shareid | loading | ok | fail
@@ -24,13 +30,16 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
     setStatus("loading");
     setErr(null);
 
-    fetch(`${backendBase}/api/publish/${encodeURIComponent(shareId)}/manifest`, { cache: "no-store" })
+    fetch(`${backendBase}/api/publish/${encodeURIComponent(shareId)}/manifest`, {
+      cache: "no-store",
+    })
       .then(async (r) => {
         const j = await r.json().catch(() => null);
         if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
         return j;
       })
       .then((j) => {
+        // this endpoint returns { ok: true, ...manifestFields }
         if (!j?.ok) throw new Error("manifest not ok");
         setManifest(j);
         setStatus("ok");
@@ -42,29 +51,47 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
       });
   }, [backendBase, shareId]);
 
-  // ---- normalize tracks for BottomPlayer ----
+  // ---- normalize tracks for App/BottomPlayer pipeline ----
+  // CRITICAL: App signs using track.s3Key and then sets track.url.
+  // Your publish manifest stores the S3 key under `audioKey`.
   const tracks = useMemo(() => {
-    const src = manifest?.tracks || manifest?.album?.tracks || [];
+    const src = manifest?.tracks || [];
     if (!Array.isArray(src)) return [];
+
     return src
-      .map((t) => ({
-        title: t.title || `Track ${t.slot ?? ""}`.trim(),
-        // BottomPlayer supports track.url OR track.audioUrl
-        audioUrl: t.audioUrl || "",
-        url: t.url || "", // keep if backend ever returns url directly
-        // keep keys if you ever want signing later
-        audioKey: t.audioKey || "",
-        s3Key: t.s3Key || "",
-        durationSec: Number(t.durationSec || 0),
-      }))
-      .filter((t) => t.audioUrl || t.url || t.s3Key || t.audioKey);
+      .map((t) => {
+        const slot = Number(t?.slot || 0) || 0;
+        const title = String(t?.title || "").trim() || (slot ? `Track ${slot}` : "Track");
+
+        const audioKey = String(t?.audioKey || "").trim(); // <-- THIS IS THE KEY WE SIGN
+        const audioUrl = String(t?.audioUrl || "").trim(); // public fallback (optional)
+
+        // If audioKey exists, prefer signing via backend (private-compatible).
+        // If audioKey missing but audioUrl exists, fall back to direct URL.
+        const s3Key = audioKey || "";
+        const url = !s3Key && audioUrl ? audioUrl : "";
+
+        if (!s3Key && !url) return null;
+
+        return {
+          slot,
+          title,
+          s3Key, // <-- App will sign this and produce track.url
+          url, // <-- fallback only when no s3Key
+          audioKey,
+          audioUrl,
+          durationSec: Number(t?.durationSec || 0) || 0,
+        };
+      })
+      .filter(Boolean);
   }, [manifest]);
 
-  // Optional: auto-start first track when manifest loads (comment out if you don’t want autoplay)
+  // Optional auto-start first track once manifest loads (remove if you don’t want it)
   useEffect(() => {
     if (status !== "ok") return;
     if (!tracks.length) return;
     if (typeof onPickTrack !== "function") return;
+
     onPickTrack({ tracks, index: 0, mode: "album" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, tracks.length]);
@@ -73,7 +100,9 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
     return (
       <div style={{ padding: 16 }}>
         <div style={{ fontWeight: 900 }}>Product</div>
-        <div style={{ marginTop: 8, opacity: 0.85 }}>Missing backend env (VITE_ALBUM_BACKEND_URL).</div>
+        <div style={{ marginTop: 8, opacity: 0.85 }}>
+          Missing backend env (VITE_ALBUM_BACKEND_URL).
+        </div>
       </div>
     );
   }
@@ -93,9 +122,18 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
     return (
       <div style={{ padding: 16 }}>
         <div style={{ fontWeight: 900 }}>Product</div>
-        <div style={{ marginTop: 10, padding: 12, border: "1px solid rgba(255,0,0,0.45)", borderRadius: 12 }}>
+        <div
+          style={{
+            marginTop: 10,
+            padding: 12,
+            border: "1px solid rgba(255,0,0,0.45)",
+            borderRadius: 12,
+          }}
+        >
           <div style={{ fontWeight: 900, marginBottom: 6 }}>Failed to load product</div>
-          <div style={{ opacity: 0.9, whiteSpace: "pre-wrap" }}>{String(err?.message || err)}</div>
+          <div style={{ opacity: 0.9, whiteSpace: "pre-wrap" }}>
+            {String(err?.message || err)}
+          </div>
         </div>
       </div>
     );
@@ -105,7 +143,9 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
 
   const albumName = String(manifest?.albumName || manifest?.album?.title || "Album");
   const performers = String(manifest?.performers || manifest?.album?.artist || "");
-  const description = String(manifest?.productDescription || "Digital album access tied to published snapshot.");
+  const description = String(
+    manifest?.productDescription || "Digital album access tied to published snapshot."
+  );
   const priceText = String(manifest?.priceText || "$9.99");
 
   return (
@@ -117,7 +157,14 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
       </div>
 
       {/* two-column card layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, maxWidth: 980 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 14,
+          maxWidth: 980,
+        }}
+      >
         {/* left card */}
         <div
           style={{
@@ -127,12 +174,21 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
             background: "rgba(255,255,255,0.03)",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+            }}
+          >
             <div style={{ fontWeight: 900 }}>{albumName}</div>
             <div style={{ fontWeight: 900 }}>{priceText}</div>
           </div>
 
-          <div style={{ marginTop: 10, opacity: 0.85, lineHeight: 1.35 }}>{description}</div>
+          <div style={{ marginTop: 10, opacity: 0.85, lineHeight: 1.35 }}>
+            {description}
+          </div>
 
           <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
             <a href={`/shop?shareId=${encodeURIComponent(shareId)}`} style={btn}>
@@ -154,7 +210,7 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
             background: "rgba(255,255,255,0.03)",
           }}
         >
-          <div style={{ fontWeight: 900, marginBottom: 10 }}>Preview tracklist (30s each)</div>
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>Preview tracklist (30s)</div>
 
           {!tracks.length ? (
             <div style={{ opacity: 0.8 }}>No tracks found in manifest.</div>
@@ -162,7 +218,7 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
             <div style={{ display: "grid", gap: 8 }}>
               {tracks.map((t, i) => (
                 <button
-                  key={i}
+                  key={`${t.slot || i}-${t.title}`}
                   style={trackBtn}
                   onClick={() => onPickTrack?.({ tracks, index: i, mode: "album" })}
                 >
