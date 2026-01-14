@@ -4,6 +4,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Product from "./pages/Product.jsx";
 
 const BUILD_STAMP = "BLACKOUT_WEB_200__2026-01-14__A";
+console.log("APP_VERSION", "2026-01-14T18:25Z");
 
 export default function App() {
   console.log("[APP] render", BUILD_STAMP, window.location.pathname + window.location.search);
