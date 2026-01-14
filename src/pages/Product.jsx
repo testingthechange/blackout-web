@@ -44,6 +44,7 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
   const albumTitle = manifest?.album?.title || "Album";
   const artist = manifest?.album?.artist || "";
   const releaseDate = manifest?.album?.releaseDate || "";
+  const coverUrl = manifest?.album?.coverUrl || "";
   const priceText = "$18.50";
 
   return (
@@ -51,31 +52,48 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "2fr 1fr", // ✅ column one wider
+          gridTemplateColumns: "2fr 1fr", // column one wider
           gap: 20,
           maxWidth: 1200,
         }}
       >
-        {/* LEFT COLUMN (content placeholder) */}
-        <div
-          style={{
-            border: "1px solid rgba(255,255,255,0.10)",
-            borderRadius: 16,
-            padding: 16,
-            background: "rgba(255,255,255,0.03)",
-          }}
-        >
-          <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
-            Tracklist / Content
-          </div>
-          <div style={{ opacity: 0.7 }}>
-            (Tracks, previews, details will live here)
+        {/* LEFT COLUMN */}
+        <div style={{ display: "grid", gap: 16 }}>
+          {/* COVER */}
+          {coverUrl ? (
+            <img
+              src={coverUrl}
+              alt="Album cover"
+              style={{
+                width: "100%",
+                borderRadius: 18,
+                objectFit: "cover",
+                border: "1px solid rgba(255,255,255,0.12)",
+              }}
+            />
+          ) : null}
+
+          {/* CONTENT CARD */}
+          <div
+            style={{
+              border: "1px solid rgba(255,255,255,0.10)",
+              borderRadius: 16,
+              padding: 16,
+              background: "rgba(255,255,255,0.03)",
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 8 }}>
+              Tracklist / Content
+            </div>
+            <div style={{ opacity: 0.7 }}>
+              (Tracks, previews, details will live here)
+            </div>
           </div>
         </div>
 
         {/* RIGHT COLUMN */}
         <div style={{ display: "grid", gap: 16 }}>
-          {/* TOP CARD — META */}
+          {/* META CARD */}
           <div
             style={{
               border: "1px solid rgba(255,255,255,0.10)",
@@ -93,7 +111,7 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
             )}
           </div>
 
-          {/* MIDDLE CARD — BUY */}
+          {/* BUY CARD */}
           <div
             style={{
               border: "1px solid rgba(34,197,94,0.55)",
