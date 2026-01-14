@@ -1,36 +1,48 @@
-// src/pages/Product.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { loadAlbumBundleByShareId } from "../data/published/loadAlbumBundleByShareId.js";
-import { buildAlbumBundle } from "../selectors/buildAlbumBundle.js";
 
 function getShareIdFromQuery() {
   const sp = new URLSearchParams(window.location.search);
   return String(sp.get("shareId") || "").trim();
 }
 
-export default function Product({ shareId: shareIdProp = "" }) {
-  const shareId = useMemo(() => String(shareIdProp || getShareIdFromQuery()).trim(), [shareIdProp]);
+export default function Product() {
+  const shareId = useMemo(() => getShareIdFromQuery(), []);
+  const manifestUrl = useMemo(() => {
+    if (!shareId) return "";
+    return `https://block-7306-player.s3.us-west-1.amazonaws.com/public/players/${encodeURIComponent(
+      shareId
+    )}/manifest.json`;
+  }, [shareId]);
 
-  const [album, setAlbum] = useState(null);
+  const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    setManifest(null);
+    setErr("");
+
     if (!shareId) {
-      setErr("Missing shareId");
+      setErr("Missing shareId. Use /product?shareId=YOUR_ID");
+      return;
+    }
+    if (!manifestUrl) {
+      setErr("Missing manifest URL");
       return;
     }
 
     let cancelled = false;
     setLoading(true);
-    setErr("");
-    setAlbum(null);
 
     (async () => {
       try {
-        const manifest = await loadAlbumBundleByShareId(shareId);
-        const bundle = buildAlbumBundle(manifest);
-        if (!cancelled) setAlbum(bundle);
+        const r = await fetch(manifestUrl, { cache: "no-store" });
+        if (!r.ok) throw new Error(`Manifest HTTP ${r.status}`);
+        const j = await r.json().catch(() => null);
+        if (!j) throw new Error("Manifest JSON parse failed");
+        if (String(j.shareId || "") !== String(shareId)) throw new Error("Manifest shareId mismatch");
+
+        if (!cancelled) setManifest(j);
       } catch (e) {
         if (!cancelled) setErr(e?.message || String(e));
       } finally {
@@ -41,31 +53,58 @@ export default function Product({ shareId: shareIdProp = "" }) {
     return () => {
       cancelled = true;
     };
-  }, [shareId]);
-
-  if (loading) return <div style={{ padding: 24 }}>Loading album…</div>;
-  if (err) return <div style={{ padding: 24, color: "#b91c1c", fontWeight: 900 }}>{err}</div>;
-  if (!album) return <div style={{ padding: 24 }}>No album</div>;
+  }, [shareId, manifestUrl]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ fontSize: 12, opacity: 0.7 }}>
-        ShareId: <b>{album.shareId}</b>
+    <div style={{ padding: 24, fontFamily: "system-ui, sans-serif" }}>
+      <div style={{ fontSize: 12, opacity: 0.75 }}>
+        Route: <b>{window.location.pathname}</b>
       </div>
 
-      <h1 style={{ marginTop: 12 }}>{album.meta.title || "Album"}</h1>
+      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+        ShareId: <b>{shareId || "—"}</b>
+      </div>
 
-      {album.cover.url ? (
-        <img src={album.cover.url} alt="cover" style={{ maxWidth: 320, borderRadius: 12 }} />
-      ) : null}
+      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
+        Manifest URL:{" "}
+        {manifestUrl ? (
+          <a href={manifestUrl} target="_blank" rel="noreferrer">
+            {manifestUrl}
+          </a>
+        ) : (
+          "—"
+        )}
+      </div>
 
-      <div style={{ marginTop: 20 }}>
-        {album.tracks.map((t) => (
-          <div key={t.slot} style={{ marginBottom: 8 }}>
-            {t.slot}. {t.title}
+      {loading ? <div style={{ marginTop: 14 }}>Loading manifest…</div> : null}
+      {err ? <div style={{ marginTop: 14, color: "#b91c1c", fontWeight: 800 }}>{err}</div> : null}
+
+      {manifest ? (
+        <div style={{ marginTop: 18 }}>
+          <h1 style={{ margin: 0 }}>{manifest?.album?.title || "Album"}</h1>
+
+          {manifest?.album?.coverUrl ? (
+            <img
+              src={manifest.album.coverUrl}
+              alt="cover"
+              style={{ marginTop: 12, maxWidth: 320, width: "100%", borderRadius: 12 }}
+            />
+          ) : null}
+
+          <div style={{ marginTop: 16, fontWeight: 800 }}>Tracks</div>
+          <div style={{ marginTop: 8 }}>
+            {(Array.isArray(manifest.tracks) ? manifest.tracks : []).map((t) => (
+              <div key={t.slot} style={{ marginBottom: 6 }}>
+                {t.slot}. {t.title}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+
+          <pre style={{ marginTop: 18, fontSize: 12, opacity: 0.85, whiteSpace: "pre-wrap" }}>
+            {JSON.stringify(manifest, null, 2)}
+          </pre>
+        </div>
+      ) : null}
     </div>
   );
 }
