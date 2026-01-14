@@ -63,9 +63,13 @@ export default function App() {
 
   async function signTrackIfNeeded(track) {
     if (!track) return null;
-    if (track.url) return track;
 
-    const s3Key = String(track.s3Key || "").trim();
+    // ✅ direct public audioUrl works (published manifest)
+    const directUrl = String(track.url || track.audioUrl || "").trim();
+    if (directUrl) return { ...track, url: directUrl };
+
+    // ✅ fallback to signing (if you ever feed s3Key/audioKey)
+    const s3Key = String(track.s3Key || track.audioKey || "").trim();
     if (!s3Key) return track;
 
     if (signedCache.has(s3Key)) {
@@ -163,9 +167,9 @@ export default function App() {
         </Routes>
       </div>
 
-      {/* PLAYER (FIXED: show placeholder bar when no activeTrack) */}
+      {/* PLAYER (✅ show even if only audioUrl exists; also show bar when no track) */}
       {playerVisible ? (
-        activeTrack?.url ? (
+        activeTrack?.url || activeTrack?.audioUrl ? (
           <BottomPlayer
             mode={playerMode}
             track={activeTrack}
