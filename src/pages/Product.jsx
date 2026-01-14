@@ -2,20 +2,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { getActiveShareId } from "../publish/getActiveShareId";
 
+function s3ManifestUrl(shareId) {
+  return `https://block-7306-player.s3.us-west-1.amazonaws.com/public/players/${encodeURIComponent(
+    shareId
+  )}/manifest.json`;
+}
+
 export default function Product({ backendBase: backendBaseProp, shareId: shareIdProp }) {
+  // backendBase is no longer required for manifest load (static reads S3 directly)
   const backendBase = backendBaseProp || import.meta.env.VITE_ALBUM_BACKEND_URL;
   const shareId = useMemo(() => shareIdProp || getActiveShareId(), [shareIdProp]);
 
-  const [status, setStatus] = useState("idle"); // idle | missing-env | missing-shareid | loading | ok | fail
+  const [status, setStatus] = useState("idle"); // idle | missing-shareid | loading | ok | fail
   const [manifest, setManifest] = useState(null);
   const [err, setErr] = useState(null);
 
+  const manifestUrl = useMemo(() => (shareId ? s3ManifestUrl(shareId) : ""), [shareId]);
+
   useEffect(() => {
-    if (!backendBase) {
-      setStatus("missing-env");
-      setManifest(null);
-      return;
-    }
     if (!shareId) {
       setStatus("missing-shareid");
       setManifest(null);
@@ -24,33 +28,36 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
 
     setStatus("loading");
     setErr(null);
+    setManifest(null);
 
-    fetch(`${backendBase}/api/publish/${encodeURIComponent(shareId)}/manifest`, { cache: "no-store" })
+    let cancelled = false;
+
+    fetch(manifestUrl, { cache: "no-store" })
       .then(async (r) => {
         const j = await r.json().catch(() => null);
-        if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+        if (!r.ok) throw new Error(`Manifest HTTP ${r.status}`);
+        if (!j) throw new Error("Manifest JSON parse failed");
         return j;
       })
       .then((j) => {
-        if (!j?.ok) throw new Error("manifest not ok");
-        setManifest(j);
-        setStatus("ok");
+        // support both shapes: { ok:true, ... } or raw manifest without ok
+        if (!cancelled) {
+          setManifest(j);
+          setStatus("ok");
+        }
       })
       .catch((e) => {
-        setManifest(null);
-        setErr(e);
-        setStatus("fail");
+        if (!cancelled) {
+          setManifest(null);
+          setErr(e);
+          setStatus("fail");
+        }
       });
-  }, [backendBase, shareId]);
 
-  if (status === "missing-env") {
-    return (
-      <div style={{ padding: 16 }}>
-        <div style={{ fontWeight: 900 }}>Product</div>
-        <div style={{ marginTop: 8, opacity: 0.85 }}>Missing backend env (VITE_ALBUM_BACKEND_URL).</div>
-      </div>
-    );
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [shareId, manifestUrl]);
 
   if (status === "missing-shareid") {
     return (
@@ -70,23 +77,35 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
         <div style={{ marginTop: 10, padding: 12, border: "1px solid rgba(255,0,0,0.45)", borderRadius: 12 }}>
           <div style={{ fontWeight: 900, marginBottom: 6 }}>Failed to load product</div>
           <div style={{ opacity: 0.9, whiteSpace: "pre-wrap" }}>{String(err?.message || err)}</div>
+          <div style={{ marginTop: 10, opacity: 0.8, fontSize: 12 }}>
+            Tried:{" "}
+            <a href={manifestUrl} target="_blank" rel="noreferrer" style={{ color: "white" }}>
+              {manifestUrl}
+            </a>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (!manifest) return <div style={{ padding: 16 }}>Loading…</div>;
+  if (!manifest || status === "loading") return <div style={{ padding: 16 }}>Loading…</div>;
 
-  const albumName = String(manifest?.albumName || "Album");
-  const performers = String(manifest?.performers || "");
-  const description = String(manifest?.productDescription || "Digital album access tied to published snapshot.");
+  // Accept both:
+  // - manifest.album.title (your publish output)
+  // - older product fields (albumName/performers/etc)
+  const albumName = String(manifest?.album?.title || manifest?.albumName || "Album");
+  const performers = String(manifest?.album?.artistName || manifest?.performers || "");
+  const description = String(
+    manifest?.productDescription || "Digital album access tied to published snapshot."
+  );
   const priceText = String(manifest?.priceText || "$9.99");
 
   return (
     <div style={{ padding: 16 }}>
       <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 6 }}>Product</div>
       <div style={{ opacity: 0.85, marginBottom: 14 }}>
-        {albumName}{performers ? ` — ${performers}` : ""}
+        {albumName}
+        {performers ? ` — ${performers}` : ""}
       </div>
 
       <div
@@ -115,7 +134,15 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
         </div>
 
         <div style={{ marginTop: 12, opacity: 0.75, fontSize: 12 }}>
-          Snapshot source: <code>/api/publish/{shareId}/manifest</code>
+          Manifest source:{" "}
+          <a href={manifestUrl} target="_blank" rel="noreferrer" style={{ color: "white" }}>
+            <code>{manifestUrl}</code>
+          </a>
+        </div>
+
+        {/* Optional: keep for debug */}
+        <div style={{ marginTop: 8, opacity: 0.6, fontSize: 12 }}>
+          Backend env (unused for manifest): <code>{backendBase || "—"}</code>
         </div>
       </div>
     </div>
