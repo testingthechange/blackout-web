@@ -50,20 +50,8 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
       <div style={title}>Product</div>
 
       <div style={grid}>
-        {/* COLUMN 1 — COVER */}
-        <div>
-          <div style={coverWrap}>
-            {album.coverUrl ? (
-              <img src={album.coverUrl} alt="Album cover" style={coverImg} />
-            ) : (
-              <div style={coverFallback}>No cover</div>
-            )}
-          </div>
-        </div>
-
-        {/* COLUMN 2 — CONTENT */}
+        {/* COLUMN 1 — CONTENT (NOW WIDE) */}
         <div style={{ display: "grid", gap: 14 }}>
-          {/* META CARD */}
           <div style={card}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>
               {album.title || "Album"}
@@ -76,10 +64,8 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
             </div>
           </div>
 
-          {/* BUY BUTTON (NO BACKGROUND CARD) */}
           <button style={buyBtn}>BUY $18.50</button>
 
-          {/* MARKETING CARD */}
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 6 }}>
               Instant access · No friction
@@ -96,7 +82,6 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
             </div>
           </div>
 
-          {/* TRACK LIST */}
           <div style={card}>
             <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracklist</div>
 
@@ -106,15 +91,24 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
               <div style={{ display: "grid", gap: 8 }}>
                 {tracks.map((t, i) => (
                   <div key={i} style={trackRow}>
-                    <div style={{ opacity: 0.75 }}>
-                      {fmt(t.durationSec)}
-                    </div>
+                    <div style={{ opacity: 0.75 }}>{fmt(t.durationSec)}</div>
                     <div style={{ fontWeight: 900 }}>
                       {i + 1}. {t.title || `Track ${i + 1}`}
                     </div>
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* COLUMN 2 — COVER (NOW NARROW) */}
+        <div>
+          <div style={coverWrap}>
+            {album.coverUrl ? (
+              <img src={album.coverUrl} alt="Album cover" style={coverImg} />
+            ) : (
+              <div style={coverFallback}>No cover</div>
             )}
           </div>
         </div>
@@ -142,7 +136,7 @@ const title = {
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "420px 1fr",
+  gridTemplateColumns: "1fr 420px", // ← FLIPPED
   gap: 18,
   maxWidth: 1200,
 };

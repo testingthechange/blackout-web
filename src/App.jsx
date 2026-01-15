@@ -11,6 +11,7 @@ import Login from "./pages/Login.jsx";
 import BottomPlayer from "./components/BottomPlayer.jsx";
 
 const BACKEND_BASE = (import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
+const PREVIEW_SECONDS = 40;
 
 async function fetchJson(url) {
   const r = await fetch(url, { cache: "no-store" });
@@ -24,7 +25,7 @@ export default function App() {
   const nav = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // ---- SHARE ID (querystring-first, canonical) ----
+  // ---- SHARE ID ----
   const queryShareId = String(searchParams.get("shareId") || "").trim();
 
   const routeShareId = useMemo(() => {
@@ -59,7 +60,7 @@ export default function App() {
     setSearchParams(next, { replace: true });
   }
 
-  // ---- PLAYER STATE (kept, but optional) ----
+  // ---- PLAYER STATE ----
   const [queue, setQueue] = useState([]);
   const [idx, setIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -81,7 +82,9 @@ export default function App() {
 
     if (signedCache.has(s3Key)) return { ...track, url: signedCache.get(s3Key) };
 
-    const j = await fetchJson(`${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`);
+    const j = await fetchJson(
+      `${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`
+    );
     if (!j?.url) throw new Error("Failed to sign playback url");
     signedCache.set(s3Key, j.url);
     return { ...track, url: j.url };
@@ -122,8 +125,7 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 120px" }}>
         {/* HEADER */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, maxWidth: 1100 }}>
-
+        <div style={{ display: "grid", gridTemplateColumns: "1.15fr .85fr", gap: 14, maxWidth: 1100 }}>
           <div style={{ fontWeight: 900 }}>Block Radius</div>
 
           <div style={{ display: "flex", gap: 18, justifyContent: "center" }}>
@@ -132,7 +134,6 @@ export default function App() {
             <Link to={productHref} style={navLink}>Product</Link>
           </div>
 
-          {/* Right: login + global search under it */}
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <div style={{ width: 360 }}>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -167,27 +168,21 @@ export default function App() {
         {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
-
           <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={activeShareId} />} />
-
-          {/* /product?shareId=... */}
           <Route
             path="/product"
             element={<Product backendBase={BACKEND_BASE} shareId={activeShareId} onPickTrack={setPlayContext} />}
           />
-
-          {/* legacy support */}
           <Route
             path="/shop/product/:shareId"
             element={<Product backendBase={BACKEND_BASE} shareId={activeShareId} onPickTrack={setPlayContext} />}
           />
-
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
         </Routes>
       </div>
 
-      {/* PLAYER (kept) */}
+      {/* PLAYER */}
       {playerVisible ? (
         activeTrack?.url ? (
           <BottomPlayer
@@ -199,7 +194,7 @@ export default function App() {
             onPlayPause={setIsPlaying}
             onPrev={goPrev}
             onNext={goNext}
-            previewSeconds={30}
+            previewSeconds={onProductPage ? PREVIEW_SECONDS : 0}
           />
         ) : (
           <div
