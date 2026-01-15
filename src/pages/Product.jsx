@@ -101,10 +101,15 @@ export default function Product({
               <div style={{ display: "grid", gap: 8 }}>
                 {tracks.map((t, i) => (
                   <button
-                    key={i}
-                    type="button"
-                    style={trackRowBtn}
-                    onClick={() => onPickTrack?.({ tracks, index: i, mode: "album" })}
+              key={i}
+              type="button"
+              style={trackRowBtn}
+              onClick={() => {
+                console.log("[Product] click track", i, t);
+                console.log("[Product] onPickTrack exists?", !!onPickTrack);
+                onPickTrack?.({ tracks, index: i, mode: "album" });
+              }}
+
                   >
                     <div style={{ opacity: 0.75 }}>{fmt(t.durationSec)}</div>
                     <div style={{ fontWeight: 900 }}>
