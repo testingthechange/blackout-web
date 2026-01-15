@@ -25,7 +25,6 @@ export default function App() {
   const nav = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // ---- SHARE ID (querystring-first, canonical) ----
   const queryShareId = String(searchParams.get("shareId") || "").trim();
 
   const routeShareId = useMemo(() => {
@@ -35,7 +34,6 @@ export default function App() {
 
   const activeShareId = routeShareId || queryShareId;
 
-  // ---- BACKEND STATUS ----
   const [backendStatus, setBackendStatus] = useState("checking");
   useEffect(() => {
     if (!BACKEND_BASE) {
@@ -47,7 +45,6 @@ export default function App() {
       .catch(() => setBackendStatus("fail"));
   }, []);
 
-  // ---- GLOBAL SEARCH ----
   const qParam = String(searchParams.get("q") || "").trim();
   const [searchDraft, setSearchDraft] = useState(qParam);
   useEffect(() => setSearchDraft(qParam), [qParam]);
@@ -60,7 +57,7 @@ export default function App() {
     setSearchParams(next, { replace: true });
   }
 
-  // ---- PLAYER STATE (kept, but optional) ----
+  // Player state
   const [queue, setQueue] = useState([]);
   const [idx, setIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -122,7 +119,6 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 120px" }}>
-        {/* HEADER */}
         <div style={{ display: "grid", gridTemplateColumns: "1.15fr .85fr", gap: 14, maxWidth: 1100 }}>
           <div style={{ fontWeight: 900 }}>Block Radius</div>
 
@@ -132,7 +128,6 @@ export default function App() {
             <Link to={productHref} style={navLink}>Product</Link>
           </div>
 
-          {/* Right: login + global search under it */}
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <div style={{ width: 360 }}>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -159,15 +154,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* STATUS */}
         <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
           Backend: {String(backendStatus).toUpperCase()} · ShareId: {activeShareId || "—"}
         </div>
 
-        {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
-
           <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={activeShareId} />} />
 
           <Route
@@ -197,7 +189,6 @@ export default function App() {
         </Routes>
       </div>
 
-      {/* PLAYER */}
       {playerVisible ? (
         activeTrack?.url ? (
           <BottomPlayer
@@ -209,7 +200,7 @@ export default function App() {
             onPlayPause={setIsPlaying}
             onPrev={goPrev}
             onNext={goNext}
-            previewSeconds={onProductPage ? PREVIEW_SECONDS : 0}
+            previewSeconds={PREVIEW_SECONDS} // 40s preview on Product page
           />
         ) : (
           <div

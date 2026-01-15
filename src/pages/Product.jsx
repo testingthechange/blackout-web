@@ -1,3 +1,4 @@
+// src/pages/Product.jsx
 import { useEffect, useMemo, useState } from "react";
 
 export default function Product({
@@ -54,7 +55,7 @@ export default function Product({
       <div style={title}>Product</div>
 
       <div style={grid}>
-        {/* COLUMN 1 — CONTENT (WIDE) */}
+        {/* CONTENT (WIDE) */}
         <div style={{ display: "grid", gap: 14 }}>
           <div style={card}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>{album.title || "Album"}</div>
@@ -81,7 +82,7 @@ export default function Product({
           </div>
 
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracklist</div>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracklist (click to play)</div>
 
             {!tracks.length ? (
               <div style={{ opacity: 0.75 }}>No tracks available</div>
@@ -105,7 +106,7 @@ export default function Product({
           </div>
         </div>
 
-        {/* COLUMN 2 — COVER (NARROW) */}
+        {/* COVER (NARROW) */}
         <div>
           <div style={coverWrap}>
             {album.coverUrl ? (
@@ -120,8 +121,6 @@ export default function Product({
   );
 }
 
-/* ---------- helpers & styles ---------- */
-
 function fmt(sec) {
   const s = Math.max(0, Math.floor(sec || 0));
   const m = Math.floor(s / 60);
@@ -131,15 +130,11 @@ function fmt(sec) {
 
 const pad = { padding: 18 };
 
-const title = {
-  fontWeight: 900,
-  fontSize: 22,
-  marginBottom: 14,
-};
+const title = { fontWeight: 900, fontSize: 22, marginBottom: 14 };
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "1fr 420px", // flipped sizes
+  gridTemplateColumns: "1fr 420px",
   gap: 18,
   maxWidth: 1200,
 };
@@ -153,11 +148,7 @@ const coverWrap = {
   background: "rgba(255,255,255,0.04)",
 };
 
-const coverImg = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-};
+const coverImg = { width: "100%", height: "100%", objectFit: "cover" };
 
 const coverFallback = {
   width: "100%",
