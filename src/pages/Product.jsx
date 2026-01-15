@@ -1,5 +1,3 @@
-console.log("PRODUCT FILE VERSION — POINTER DEBUG V1");
-
 // src/pages/Product.jsx
 import { useEffect, useMemo, useState } from "react";
 
@@ -8,7 +6,8 @@ export default function Product({
   shareId: shareIdProp,
   onPickTrack,
 }) {
-  const backendBase = (backendBaseProp || import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
+  const backendBase = (backendBaseProp || import.meta.env.VITE_ALBUM_BACKEND_URL || "")
+    .replace(/\/+$/, "");
   const shareId = useMemo(() => String(shareIdProp || "").trim(), [shareIdProp]);
 
   const [status, setStatus] = useState("idle");
@@ -16,32 +15,18 @@ export default function Product({
   const [err, setErr] = useState(null);
 
   useEffect(() => {
-    if (!backendBase) {
-      setStatus("missing-env");
-      return;
-    }
-    if (!shareId) {
-      setStatus("missing-shareid");
-      return;
-    }
+    if (!backendBase) { setStatus("missing-env"); return; }
+    if (!shareId) { setStatus("missing-shareid"); return; }
 
     setStatus("loading");
-    fetch(`${backendBase}/api/publish/${encodeURIComponent(shareId)}/manifest`, {
-      cache: "no-store",
-    })
+    fetch(`${backendBase}/api/publish/${encodeURIComponent(shareId)}/manifest`, { cache: "no-store" })
       .then(async (r) => {
         const j = await r.json().catch(() => null);
         if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
         return j;
       })
-      .then((j) => {
-        setManifest(j);
-        setStatus("ok");
-      })
-      .catch((e) => {
-        setErr(e);
-        setStatus("fail");
-      });
+      .then((j) => { setManifest(j); setStatus("ok"); })
+      .catch((e) => { setErr(e); setStatus("fail"); });
   }, [backendBase, shareId]);
 
   if (status === "missing-env") return <div style={pad}>Missing backend env</div>;
@@ -52,16 +37,15 @@ export default function Product({
   const album = manifest.album || {};
   const tracks = Array.isArray(manifest.tracks) ? manifest.tracks : [];
 
-  // Debug: prove this component is running + show track count
+  console.log("PRODUCT FILE VERSION — CLEAN PLAY PICK V2");
   console.log("[Product] RENDER", { shareId, tracksLen: tracks.length });
-console.log("[Product] onPickTrack type:", typeof onPickTrack);
-  
+  console.log("[Product] onPickTrack type:", typeof onPickTrack);
+
   return (
     <div style={{ padding: 18 }}>
       <div style={title}>Product</div>
 
       <div style={grid}>
-        {/* COLUMN 1 — COVER (LEFT, WIDE) */}
         <div>
           <div style={coverWrap}>
             {album.coverUrl ? (
@@ -72,7 +56,6 @@ console.log("[Product] onPickTrack type:", typeof onPickTrack);
           </div>
         </div>
 
-        {/* COLUMN 2 — CONTENT (RIGHT, NARROW) */}
         <div style={{ display: "grid", gap: 14 }}>
           <div style={card}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>{album.title || "Album"}</div>
@@ -85,21 +68,7 @@ console.log("[Product] onPickTrack type:", typeof onPickTrack);
           <button style={buyBtn}>BUY $18.50</button>
 
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>Instant access · No friction</div>
-            <div style={{ opacity: 0.85, lineHeight: 1.45 }}>
-              Preview tracks below. Purchase unlocks full-length playback in your account across all
-              devices.
-            </div>
-
-            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-              <div style={pill}>High-quality audio</div>
-              <div style={pill}>Fast checkout</div>
-              <div style={pill}>Permanent access</div>
-            </div>
-          </div>
-
-          <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracklist (click to play)</div>
+            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tracklist (tap to play)</div>
 
             {!tracks.length ? (
               <div style={{ opacity: 0.75 }}>No tracks available</div>
@@ -110,11 +79,8 @@ console.log("[Product] onPickTrack type:", typeof onPickTrack);
                     key={i}
                     type="button"
                     style={trackRowBtn}
-                    onMouseDown={() => alert(`mousedown track ${i + 1}`)}
-                    onClick={() => {
-                      alert(`click track ${i + 1}`);
-                      console.log("[Product] click track", i, t);
-                      console.log("[Product] onPickTrack exists?", !!onPickTrack);
+                    onPointerDown={() => {
+                      console.log("[Product] pick", i, t);
                       onPickTrack?.({ tracks, index: i, mode: "album" });
                     }}
                   >
@@ -191,24 +157,11 @@ const buyBtn = {
   cursor: "pointer",
 };
 
-const pill = {
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(255,255,255,0.06)",
-  borderRadius: 999,
-  padding: "6px 10px",
-  fontSize: 12,
-  fontWeight: 900,
-};
-
-const trackRow = {
+const trackRowBtn = {
   display: "grid",
   gridTemplateColumns: "48px 1fr",
   gap: 10,
   alignItems: "center",
-};
-
-const trackRowBtn = {
-  ...trackRow,
   width: "100%",
   textAlign: "left",
   border: "1px solid rgba(255,255,255,0.10)",
@@ -217,7 +170,4 @@ const trackRowBtn = {
   padding: "10px 12px",
   cursor: "pointer",
   color: "white",
-  position: "relative",
-  zIndex: 2,
-  pointerEvents: "auto",
 };
