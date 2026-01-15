@@ -1,4 +1,3 @@
-// src/pages/Product.jsx
 import { useEffect, useMemo, useState } from "react";
 
 export default function Product({
@@ -58,12 +57,8 @@ export default function Product({
         {/* COLUMN 1 — CONTENT (WIDE) */}
         <div style={{ display: "grid", gap: 14 }}>
           <div style={card}>
-            <div style={{ fontWeight: 900, fontSize: 18 }}>
-              {album.title || "Album"}
-            </div>
-            <div style={{ opacity: 0.8, marginTop: 4 }}>
-              {album.artist || ""}
-            </div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>{album.title || "Album"}</div>
+            <div style={{ opacity: 0.8, marginTop: 4 }}>{album.artist || ""}</div>
             <div style={{ opacity: 0.75, marginTop: 8 }}>
               Digital album access tied to published snapshot.
             </div>
@@ -72,12 +67,10 @@ export default function Product({
           <button style={buyBtn}>BUY $18.50</button>
 
           <div style={card}>
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>
-              Instant access · No friction
-            </div>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>Instant access · No friction</div>
             <div style={{ opacity: 0.85, lineHeight: 1.45 }}>
-              Preview tracks below. Purchase unlocks full-length playback in your
-              account across all devices.
+              Preview tracks below. Purchase unlocks full-length playback in your account across all
+              devices.
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
@@ -146,7 +139,7 @@ const title = {
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "1fr 420px",
+  gridTemplateColumns: "1fr 420px", // flipped sizes
   gap: 18,
   maxWidth: 1200,
 };
@@ -217,4 +210,8 @@ const trackRowBtn = {
   textAlign: "left",
   border: "1px solid rgba(255,255,255,0.10)",
   background: "rgba(255,255,255,0.04)",
-  borderRadius:
+  borderRadius: 12,
+  padding: "10px 12px",
+  cursor: "pointer",
+  color: "white",
+};
