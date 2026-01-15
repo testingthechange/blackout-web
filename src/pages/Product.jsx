@@ -1,3 +1,5 @@
+console.log("PRODUCT FILE VERSION — POINTER DEBUG V1");
+
 // src/pages/Product.jsx
 import { useEffect, useMemo, useState } from "react";
 
