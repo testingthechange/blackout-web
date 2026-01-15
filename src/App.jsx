@@ -189,8 +189,9 @@ export default function App() {
         </Routes>
       </div>
 
+      {/* PLAYER: mount as soon as a track is selected (url can be empty while signing) */}
       {playerVisible ? (
-        activeTrack?.url ? (
+        activeTrack ? (
           <BottomPlayer
             mode={playerMode}
             track={activeTrack}
@@ -200,7 +201,7 @@ export default function App() {
             onPlayPause={setIsPlaying}
             onPrev={goPrev}
             onNext={goNext}
-            previewSeconds={PREVIEW_SECONDS} // 40s preview on Product page
+            previewSeconds={PREVIEW_SECONDS}
           />
         ) : (
           <div
