@@ -52,7 +52,8 @@ export default function Product({
 
   // Debug: prove this component is running + show track count
   console.log("[Product] RENDER", { shareId, tracksLen: tracks.length });
-
+console.log("[Product] onPickTrack type:", typeof onPickTrack);
+  
   return (
     <div style={{ padding: 18 }}>
       <div style={title}>Product</div>
