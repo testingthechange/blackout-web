@@ -49,6 +49,8 @@ export default function Product({
 
   const album = manifest.album || {};
   const tracks = Array.isArray(manifest.tracks) ? manifest.tracks : [];
+
+  // Debug: prove this component is running + show track count
   console.log("[Product] RENDER", { shareId, tracksLen: tracks.length });
 
   return (
@@ -56,7 +58,7 @@ export default function Product({
       <div style={title}>Product</div>
 
       <div style={grid}>
-        {/* COLUMN 1 — COVER (NOW LEFT, AND WIDE) */}
+        {/* COLUMN 1 — COVER (LEFT, WIDE) */}
         <div>
           <div style={coverWrap}>
             {album.coverUrl ? (
@@ -67,7 +69,7 @@ export default function Product({
           </div>
         </div>
 
-        {/* COLUMN 2 — CONTENT (NOW RIGHT, AND NARROW) */}
+        {/* COLUMN 2 — CONTENT (RIGHT, NARROW) */}
         <div style={{ display: "grid", gap: 14 }}>
           <div style={card}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>{album.title || "Album"}</div>
@@ -102,15 +104,16 @@ export default function Product({
               <div style={{ display: "grid", gap: 8 }}>
                 {tracks.map((t, i) => (
                   <button
-              key={i}
-              type="button"
-              style={trackRowBtn}
-              onClick={() => {
-                console.log("[Product] click track", i, t);
-                console.log("[Product] onPickTrack exists?", !!onPickTrack);
-                onPickTrack?.({ tracks, index: i, mode: "album" });
-              }}
-
+                    key={i}
+                    type="button"
+                    style={trackRowBtn}
+                    onMouseDown={() => alert(`mousedown track ${i + 1}`)}
+                    onClick={() => {
+                      alert(`click track ${i + 1}`);
+                      console.log("[Product] click track", i, t);
+                      console.log("[Product] onPickTrack exists?", !!onPickTrack);
+                      onPickTrack?.({ tracks, index: i, mode: "album" });
+                    }}
                   >
                     <div style={{ opacity: 0.75 }}>{fmt(t.durationSec)}</div>
                     <div style={{ fontWeight: 900 }}>
@@ -138,7 +141,6 @@ const pad = { padding: 18 };
 
 const title = { fontWeight: 900, fontSize: 22, marginBottom: 14 };
 
-// ✅ widths swapped back (cover wide on left, meta column narrow on right)
 const grid = {
   display: "grid",
   gridTemplateColumns: "1fr 420px",
@@ -212,4 +214,7 @@ const trackRowBtn = {
   padding: "10px 12px",
   cursor: "pointer",
   color: "white",
+  position: "relative",
+  zIndex: 2,
+  pointerEvents: "auto",
 };
