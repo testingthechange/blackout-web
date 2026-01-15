@@ -119,7 +119,8 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "#111827", color: "white" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "18px 18px 120px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.15fr .85fr", gap: 14, maxWidth: 1100 }}>
+        {/* HEADER */}
+        <div style={headerWrap}>
           <div style={{ fontWeight: 900 }}>Block Radius</div>
 
           <div style={{ display: "flex", gap: 18, justifyContent: "center" }}>
@@ -128,36 +129,37 @@ export default function App() {
             <Link to={productHref} style={navLink}>Product</Link>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <div style={{ width: 360 }}>
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <Link to="/login" style={loginLink}>Login</Link>
-              </div>
-
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  updateQueryParam(searchDraft);
-                  if (!loc.pathname.startsWith("/shop")) nav("/shop" + window.location.search);
-                }}
-                style={{ marginTop: 10, display: "flex", gap: 10, justifyContent: "flex-end" }}
-              >
-                <input
-                  value={searchDraft}
-                  onChange={(e) => setSearchDraft(e.target.value)}
-                  placeholder="Search albums"
-                  style={searchInput}
-                />
-                <button type="submit" style={searchBtn}>Search</button>
-              </form>
+          {/* RIGHT: login + search, fully right-justified */}
+          <div style={rightStack}>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <Link to="/login" style={loginLink}>Login</Link>
             </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateQueryParam(searchDraft);
+                if (!loc.pathname.startsWith("/shop")) nav("/shop" + window.location.search);
+              }}
+              style={searchRow}
+            >
+              <input
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
+                placeholder="Search albums"
+                style={searchInput}
+              />
+              <button type="submit" style={searchBtn}>Search</button>
+            </form>
           </div>
         </div>
 
+        {/* STATUS */}
         <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
           Backend: {String(backendStatus).toUpperCase()} · ShareId: {activeShareId || "—"}
         </div>
 
+        {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={activeShareId} />} />
@@ -189,7 +191,7 @@ export default function App() {
         </Routes>
       </div>
 
-      {/* PLAYER: mount as soon as a track is selected (url can be empty while signing) */}
+      {/* PLAYER */}
       {playerVisible ? (
         activeTrack ? (
           <BottomPlayer
@@ -227,6 +229,29 @@ export default function App() {
     </div>
   );
 }
+
+const headerWrap = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr 1fr",
+  alignItems: "start",
+  gap: 14,
+  maxWidth: 1100,
+};
+
+const rightStack = {
+  justifySelf: "end",
+  width: 360,
+  display: "grid",
+  gap: 10,
+  justifyItems: "end",
+};
+
+const searchRow = {
+  display: "flex",
+  gap: 10,
+  justifyContent: "flex-end",
+  width: "100%",
+};
 
 const navLink = { color: "white", textDecoration: "none", fontWeight: 900 };
 
