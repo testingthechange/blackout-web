@@ -25,7 +25,7 @@ export default function App() {
   const nav = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // ---- SHARE ID ----
+  // ---- SHARE ID (querystring-first, canonical) ----
   const queryShareId = String(searchParams.get("shareId") || "").trim();
 
   const routeShareId = useMemo(() => {
@@ -60,7 +60,7 @@ export default function App() {
     setSearchParams(next, { replace: true });
   }
 
-  // ---- PLAYER STATE ----
+  // ---- PLAYER STATE (kept, but optional) ----
   const [queue, setQueue] = useState([]);
   const [idx, setIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -82,9 +82,7 @@ export default function App() {
 
     if (signedCache.has(s3Key)) return { ...track, url: signedCache.get(s3Key) };
 
-    const j = await fetchJson(
-      `${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`
-    );
+    const j = await fetchJson(`${BACKEND_BASE}/api/playback-url?s3Key=${encodeURIComponent(s3Key)}`);
     if (!j?.url) throw new Error("Failed to sign playback url");
     signedCache.set(s3Key, j.url);
     return { ...track, url: j.url };
@@ -134,6 +132,7 @@ export default function App() {
             <Link to={productHref} style={navLink}>Product</Link>
           </div>
 
+          {/* Right: login + global search under it */}
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <div style={{ width: 360 }}>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -168,15 +167,31 @@ export default function App() {
         {/* ROUTES */}
         <Routes>
           <Route path="/" element={<Home />} />
+
           <Route path="/shop" element={<Shop backendBase={BACKEND_BASE} shareId={activeShareId} />} />
+
           <Route
             path="/product"
-            element={<Product backendBase={BACKEND_BASE} shareId={activeShareId} onPickTrack={setPlayContext} />}
+            element={
+              <Product
+                backendBase={BACKEND_BASE}
+                shareId={activeShareId}
+                onPickTrack={setPlayContext}
+              />
+            }
           />
+
           <Route
             path="/shop/product/:shareId"
-            element={<Product backendBase={BACKEND_BASE} shareId={activeShareId} onPickTrack={setPlayContext} />}
+            element={
+              <Product
+                backendBase={BACKEND_BASE}
+                shareId={activeShareId}
+                onPickTrack={setPlayContext}
+              />
+            }
           />
+
           <Route path="/sold" element={<Sold />} />
           <Route path="/login" element={<Login />} />
         </Routes>

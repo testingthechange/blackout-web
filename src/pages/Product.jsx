@@ -1,6 +1,11 @@
+// src/pages/Product.jsx
 import { useEffect, useMemo, useState } from "react";
 
-export default function Product({ backendBase: backendBaseProp, shareId: shareIdProp }) {
+export default function Product({
+  backendBase: backendBaseProp,
+  shareId: shareIdProp,
+  onPickTrack,
+}) {
   const backendBase = (backendBaseProp || import.meta.env.VITE_ALBUM_BACKEND_URL || "").replace(/\/+$/, "");
   const shareId = useMemo(() => String(shareIdProp || "").trim(), [shareIdProp]);
 
@@ -50,7 +55,7 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
       <div style={title}>Product</div>
 
       <div style={grid}>
-        {/* COLUMN 1 — CONTENT (NOW WIDE) */}
+        {/* COLUMN 1 — CONTENT (WIDE) */}
         <div style={{ display: "grid", gap: 14 }}>
           <div style={card}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>
@@ -90,19 +95,24 @@ export default function Product({ backendBase: backendBaseProp, shareId: shareId
             ) : (
               <div style={{ display: "grid", gap: 8 }}>
                 {tracks.map((t, i) => (
-                  <div key={i} style={trackRow}>
+                  <button
+                    key={i}
+                    type="button"
+                    style={trackRowBtn}
+                    onClick={() => onPickTrack?.({ tracks, index: i, mode: "album" })}
+                  >
                     <div style={{ opacity: 0.75 }}>{fmt(t.durationSec)}</div>
                     <div style={{ fontWeight: 900 }}>
                       {i + 1}. {t.title || `Track ${i + 1}`}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
           </div>
         </div>
 
-        {/* COLUMN 2 — COVER (NOW NARROW) */}
+        {/* COLUMN 2 — COVER (NARROW) */}
         <div>
           <div style={coverWrap}>
             {album.coverUrl ? (
@@ -136,7 +146,7 @@ const title = {
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "1fr 420px", // ← FLIPPED
+  gridTemplateColumns: "1fr 420px",
   gap: 18,
   maxWidth: 1200,
 };
@@ -200,3 +210,11 @@ const trackRow = {
   gap: 10,
   alignItems: "center",
 };
+
+const trackRowBtn = {
+  ...trackRow,
+  width: "100%",
+  textAlign: "left",
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.04)",
+  borderRadius:
