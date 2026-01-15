@@ -53,7 +53,7 @@ export default function Product({
   // Debug: prove this component is running + show track count
   console.log("[Product] RENDER", { shareId, tracksLen: tracks.length });
 console.log("[Product] onPickTrack type:", typeof onPickTrack);
-
+  
   return (
     <div style={{ padding: 18 }}>
       <div style={title}>Product</div>
@@ -130,13 +130,6 @@ console.log("[Product] onPickTrack type:", typeof onPickTrack);
     </div>
   );
 }
-useEffect(() => {
-  if (!tracks.length) return;
-  console.log("[Product] AUTO pick 0");
-  onPickTrack?.({ tracks, index: 0, mode: "album" });
-  // run once per shareId
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [shareId]);
 
 function fmt(sec) {
   const s = Math.max(0, Math.floor(sec || 0));
