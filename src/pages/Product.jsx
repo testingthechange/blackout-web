@@ -49,6 +49,7 @@ export default function Product({
 
   const album = manifest.album || {};
   const tracks = Array.isArray(manifest.tracks) ? manifest.tracks : [];
+  console.log("[Product] RENDER", { shareId, tracksLen: tracks.length });
 
   return (
     <div style={{ padding: 18 }}>
