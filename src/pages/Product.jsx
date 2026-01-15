@@ -55,7 +55,18 @@ export default function Product({
       <div style={title}>Product</div>
 
       <div style={grid}>
-        {/* CONTENT (WIDE) */}
+        {/* COLUMN 1 — COVER (NOW LEFT, AND WIDE) */}
+        <div>
+          <div style={coverWrap}>
+            {album.coverUrl ? (
+              <img src={album.coverUrl} alt="Album cover" style={coverImg} />
+            ) : (
+              <div style={coverFallback}>No cover</div>
+            )}
+          </div>
+        </div>
+
+        {/* COLUMN 2 — CONTENT (NOW RIGHT, AND NARROW) */}
         <div style={{ display: "grid", gap: 14 }}>
           <div style={card}>
             <div style={{ fontWeight: 900, fontSize: 18 }}>{album.title || "Album"}</div>
@@ -105,17 +116,6 @@ export default function Product({
             )}
           </div>
         </div>
-
-        {/* COVER (NARROW) */}
-        <div>
-          <div style={coverWrap}>
-            {album.coverUrl ? (
-              <img src={album.coverUrl} alt="Album cover" style={coverImg} />
-            ) : (
-              <div style={coverFallback}>No cover</div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -132,6 +132,7 @@ const pad = { padding: 18 };
 
 const title = { fontWeight: 900, fontSize: 22, marginBottom: 14 };
 
+// ✅ widths swapped back (cover wide on left, meta column narrow on right)
 const grid = {
   display: "grid",
   gridTemplateColumns: "1fr 420px",
