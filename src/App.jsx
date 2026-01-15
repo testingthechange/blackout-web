@@ -64,6 +64,14 @@ export default function App() {
   const [playerMode, setPlayerMode] = useState("album");
   const activeTrack = queue[idx] || null;
 
+  // DEBUG: expose player state
+  useEffect(() => {
+    window.__queue = queue;
+    window.__idx = idx;
+    window.__activeTrack = activeTrack;
+    console.log("[App] state", { q: queue.length, idx, activeTrack });
+  }, [queue, idx, activeTrack]);
+
   const onProductPage =
     loc.pathname.startsWith("/product") || loc.pathname.startsWith("/shop/product");
   const playerVisible = onProductPage;
@@ -86,6 +94,12 @@ export default function App() {
   }
 
   async function setPlayContext({ tracks, index = 0, mode = "album" }) {
+    console.log("[App] setPlayContext called", {
+      index,
+      tracksLen: tracks?.length,
+      sample: tracks?.[index],
+    });
+
     if (!Array.isArray(tracks) || !tracks.length) return;
     const i = Math.max(0, Math.min(Number(index || 0), tracks.length - 1));
     const t = await signTrackIfNeeded(tracks[i]);
@@ -129,7 +143,7 @@ export default function App() {
             <Link to={productHref} style={navLink}>Product</Link>
           </div>
 
-          {/* RIGHT: login + search, fully right-justified */}
+          {/* RIGHT: login + search, right-justified */}
           <div style={rightStack}>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Link to="/login" style={loginLink}>Login</Link>
